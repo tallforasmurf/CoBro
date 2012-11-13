@@ -32,8 +32,8 @@ for example:
 
 * easy linking to the comic's back-story or character lists.
 
-The comic authors lose out because the source download
-that Comictastic isn't a "visit" in web terms, so they
+The comic authors lose out because a source download
+by Comictastic isn't a "visit" in web terms, so they
 lose out on visitor counts and on ad revenue.
 
 I thought a long time about making a better version
@@ -108,9 +108,9 @@ Each name is associated with these data:
 
 * an SHA-1 hash of the last-read page of this comic
 
-* the status of the comic: no new comic, yes no comic, or error
+* the status of the comic: no new comic, yes new comic, or error
 
-* the text of the comic web page
+* the text contents last read from the comic web page
 
 The font style of each item indicates its status:
 
@@ -129,26 +129,28 @@ Refresh Operation
 When the app starts up it performs File > Refresh All automatically.
 This and Refresh Selected operate the same:
 
-* The app goes through the (selected) items in the list one at a time from the top.
+* The app goes through the (selected) items in the list one at a time from the top and on each it:
 
-* For each it attempts to read the source of the one page at the associated URL.
+* Sets italic font on the name and attempts to read the source of the one page at the associated URL.
 
-* If this times out or yields another error, set error status (and strikethrough font)
+* If this times out or yields an error, set error status and strikethrough font
 
-* Compute the hash of the just-read page and compare to the stored hash.
+* Else compute the hash of the just-read page and compare to the stored hash.
 
 * If the hash is different, set new comic status and bold font.
 
-* Either way save the text of the web page in memory.
+* Else set normal font (no new comic)
+
+* Save the text of the web page in memory.
 
 Display Operation
 -----------------
 
-When the user clicks on a comic name, pass the text of the its page to the QWebView for rendering. (QWebView uses Webkit and is quite speedy.) This may take a moment if the page links numerous ads and images, but it will be quicker than the initial click on a browser bookmark.
+When the user clicks on a comic name, pass the text of its page to the QWebView for rendering. (QWebView uses Webkit and is quite speedy.) This may take a moment if the page links numerous ads and images, but it will be quicker than the initial click on a browser bookmark.
 
-QWebview provides for disabling java and javascript and this will be done. So no scripting, which will speed display. If some ads don't run, tough cookies.
+QWebview will be configured to disable java and javascript, so no scripting, which will speed display. If some ads don't run as a result, that's too bad but no skin of my nose.
 
-After displaying a new comic, set the status of that comic to not-new.
+After displaying a new comic, set the status of that comic to not-new (and normal name font).
 
 Shutdown Operation
 ------------------
