@@ -6,69 +6,72 @@ The Inspiration: Comictastic
 
 For years I've used the little app Comictastic 
 (see http://spiny.com/comictastic/) to read
-a dozen or more webcomics daily. However, it has
+a couple dozen web comics daily. However, it has
 several drawbacks:
 
-* It is difficult to configure new comics,
+* It is no longer supported and isn't open-source so it can't be forked;
 
-* Sometimes it is impossible to make a comic work (e.g. bugcomic.com)
+* It is difficult to configure new comics;
 
-* Comictastic is a web scraper, it fetches only the image of the comic
+* Sometimes it is impossible to make a comic work;
 
-The third point is the most important. 
-It means that the user loses out on several features 
-provided by the full HTML page of the typical webcomic,
+* It is a web scraper, it fetches only the image of the comic and nothing else.
+
+The last point is the most important. It creates drawbacks for
+both the user and for the authors of the comics.
+
+The user loses out on features 
+provided by the full HTML page of the typical comic,
 for example:
 
-* the Red Button on every SMBC comic,
+* the Red Button on every SMBC comic;
 
-* the title that pops up when hovering the XKCD image,
+* the title that pops up when hovering the XKCD image;
 
-* the previous/next/first/random buttons on most comics
+* the previous/next/first/random navigation buttons on most comics;
 
-Not only do I lose out on these functions;
-the comic authors lose out because the source download
-that Comictastic does fails to register as a "view" for
-the ads on those pages -- depriving the authors of the
-revenue stream and from the count of a "visitor".
+* easy linking to the comic's back-story or character lists.
 
-I thought long and hard about how to do a better version
-of Comictastic, one with more flexible and smarter configuration,
-maybe with the ability also to "scrape" the previous/next links
-and display those buttons, etc.
+The comic authors lose out because the source download
+that Comictastic isn't a "visit" in web terms, so they
+lose out on visitor counts and on ad revenue.
 
-Eventually I concluded
-that the only equitable way to read webcomics is to use a browser
+I thought a long time about making a better version
+of Comictastic with easier configuration,
+maybe with the ability also to display the navigation buttons
+or the SMBC red button, etc. But finally I concluded
+that the only equitable way to read web comics is to use a browser
 to render the whole page. That's also the simplest way to do it
 from both a coding standpoint (assuming one has access to a
-web page renderer as a canned widget) and from a usability standpoint:
+web page renderer as a canned widget) and the
+best from a usability standpoint:
 no need to "configure" each comic, no need to worry about the
-quirks of each comic's html code. Just render the page.
+quirks of each comic's html code. Just get the URL and render the page.
 
 A Specialty Browser
 -------------------
 
 However, a general-purpose browser like Firefox or Chrome is not
 a good way to read comics either. I load 32 comics in Comictastic
-now. It is very convenient to:
+now. It is very convenient that it:
 
-* have the program present these in a scrolling list on the left;
+* Presents these in a scrolling list of names;
 
-* start pre-loading these when the program launches;
+* Starts pre-loading comics as soon as the program launches;
 
-* display comic names in bold when there is an unread episode;
+* Displays comic names in bold when there is an unread episode;
 
-* display the comic quickly, with a single click on the comic name
-or by scrolling the list of names with the arrow keys.
+* Displays a comic quickly, with a single click on the name
+or while scrolling the list of names with the arrow keys.
 
-These conveniences are not available if I read the same list in
-Chrome or Firefox: I'd have to use the browser's
+These conveniences are not available if I were to read the same list in
+Chrome or Firefox. I'd have to use the browser's
 bookmark manager, and reading through a list of comics would entail
 many more clicks and some delay for each (because they aren't preloaded).
 
 What I want is a small, simple web browser specially designed for
 reading web comics with full HTML support but all the convenience 
-of Comictastic.
+of Comictastic. Qt/PyQt gives me the materials to build this.
 
 THE SPEC
 ========
