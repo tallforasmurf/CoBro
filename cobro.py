@@ -117,6 +117,7 @@ from PyQt4.QtCore import (
     pyqtSignal,
     Qt,
     QAbstractListModel,
+    QByteArray,
     QModelIndex,
     QMutex,
     QPoint,
@@ -234,17 +235,19 @@ def setup_jolly_fonts():
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # A small class to represent the days of the week when a comic might be
 # updated. We number days Monday=0 to Sunday=6. The class is basically a
-# string of 7 characters with '-' meaning "no update".
+# string of 7 characters with '-' meaning "no update", except that when
+# the whole string is hyphens it's "don't know" and every day is an upday.
 
 class UpDays() :
     dayLetters = 'MTWTFSS' # actual values unimportant as long as not '-'
+    empty = '-------'
     def __init__(self, setup = '-------' ) :
         self.days = setup + u'' # force a copy of the string parameter
-        if len(self.days) != 7 : # e.g. it's a null string
-            self.days = '-------' 
-    # Return true for a day that isn't a hyphen
+        if len(self.days) != 7 : # e.g. it's a null string (or an error)
+            self.days = UpDays.empty
+    # Is this an update day? Yes if it isn't a hyphen or this is an empty object
     def testDay(self, day) :
-        return self.days[day] != '-'
+        return (self.days == UpDays.empty) or (self.days[day] != '-')
     # Set a day to hyphen or not hyphen
     def setDay(self, day, onoff) :
         # str and unicode are immutable, so build a new string by slicing
@@ -277,14 +280,14 @@ class UpDays() :
 #
 
 class Comic() :
-    def __init__(self, n=u'', s=OLDCOMIC, u=u'', h=u'', d=u'-------', l=0 ) :
+    def __init__(self, n=u'', s=OLDCOMIC, u=u'', h='', d=u'-------', l=0 ) :
         self.name = n
         self.status = s
         self.url = u
         self.page = u''
-        self.sha1 = h
+        self.sha1 = bytes(h)
         self.updays = UpDays(d)
-        self.lastviewed = l
+        self.lastread = l
 
 #
 # The list is initialized at startup, see ConcreteListModel.load()
@@ -302,7 +305,7 @@ PageRole = URLRole + 1 # data() request for page content string
 HashRole = PageRole + 1 # data() request for hash string
 StatusRole = HashRole + 1 # data() request for comic status
 DaysRole =  StatusRole + 1 # data() request for updays
-LastViewRole = DaysRole + 1 # data() request for lastviewed date
+LastReadRole = DaysRole + 1 # data() request for lastread date
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Synchronization between the main thread and the refresh thread.
@@ -338,12 +341,18 @@ class WorkerBee ( QThread ) :
         super(WorkerBee, self).__init__(parent)
         # save a hash which will be duplicated for each comic read
         self.hash = hashlib.sha1()
-        # save today's date number for comparisons
-        self.a_week_ago = datetime.date.toordinal(datetime.date.today()) - 7
+        # save today's date ordinal number for comparisons
+        self.today = datetime.date.today()
+        self.ordinal_today = self.today.toordinal()
+        # save the ordinal of a week ago
+        self.a_week_ago = self.ordinal_today - 7
+        # save the number of the day of the week: UpDay uses 0-6 for Mon-Sun,
+        # which is one less than the ISO day of the week numbering.
+        self.day_of_week = self.today.isoweekday() - 1
 
     def run(self) :
         global work_queue, work_queue_lock, worker_working, worker_waits
-        work_queue_lock.lock()
+        work_queue_lock.lock() # start out owning the lock
         while True :
             # invariant: we own work_queue_lock at this point of the loop
             if 0 < len(work_queue) :
@@ -360,17 +369,22 @@ class WorkerBee ( QThread ) :
             else :
                 # There is no work. At this point we own the lock. Set the
                 # flag to allow the main thread to delete or reorder indexes.
-                # Enter a wait on the QWaitCondition which releases the lock
+                # Enter a wait on the QWaitCondition: that releases the lock
                 # before it sleeps, and re-acquires the lock when it wakes.
                 worker_working = False
                 worker_waits.wait(work_queue_lock)
 
     # Process one Comic: Signal the main thread to update status to WORKING.
-    # Read the page at its URL. If any error, signal status of BADCOMIC & exit.
+    # Test whether: 
+    #    it is an upday for this comic, or 
+    #    7 days have passed since it was last read, or
+    #    an upday has passed since it was last read.
+    # If not, there is no need to update the page and the hash, so signal it
+    # as OLDCOMIC and exit.
+    # Else, read the page at its URL. If any error, signal status of BADCOMIC & exit.
     # Compute the page hash and compare to the old hash.
     # If different, save the new hash and signal status of NEWCOMIC.
-    # Else if today is more than 7 days since the comic was last viewed,
-    # signal NEWCOMIC status, Else signal OLDCOMIC status.
+    # Else signal OLDCOMIC status.
 
     def process_one(self, ix) :
         global read_url, OLDCOMIC, NEWCOMIC, BADCOMIC, WORKING
@@ -378,16 +392,37 @@ class WorkerBee ( QThread ) :
         row = ix.row()
         self.emit(SIGNAL('statusChanged'), row, WORKING)
         comic = comics[row]
+        days_since_read = self.ordinal_today - comic.lastread
+        if days_since_read > 7 :
+            # 7 or more days since the comic was checked, do read it.
+            read_it = True
+        else:
+            # 0 to 6 days since we read this comic. Want to test those days for 
+            # update-days. Suppose it has been 5 days and today is Wednesday (day 2)
+            # we want to test days 2, 1, 0, 6, 5 in order. We could stop at the first
+            # hit but for this little loop that's not worth the extra test and break.
+            read_it = comic.updays.testDay(self.day_of_week) # is TODAY an update day?
+            for i in range (days_since_read) :
+                read_it |= comic.updays.testDay( (self.day_of_week - i) % 7 )
+        if not read_it : 
+            # not an update day and recently seen
+            self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
+            return
         if not self.read_url(comic) :
             # some problem reading the comic, mark it bad and quit
             self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
             return
-        sha1 = self.hash.copy()
-        sha1.update(comic.page)
-        if comic.lastviewed < self.a_week_ago or comic.sha1 != sha1.digest() :
-            comic.sha1 = bytes(sha1.digest())
+        # Successful read, set the date of the new hash we are about to make
+        comic.lastread = self.ordinal_today
+        sha1 = self.hash.copy() # make a new, empty hash gizmo
+        sha1.update(comic.page) # feed it the page we just read
+        new_hash = bytes(sha1.digest()) # save the resulting hash signature
+        if comic.sha1 != new_hash :
+            # The comic's web page has changed since it was seen.
+            comic.sha1 = new_hash
             self.emit(SIGNAL('statusChanged'), row, NEWCOMIC)
         else :
+            # it has not changed.
             self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
         return
 
@@ -461,19 +496,27 @@ class ConcreteListModel ( QAbstractListModel ) :
     # In Mac OS, see ~/Library/Preferences/tassos-oak.com/Cobro.plist
     # In Linux see $HOME/.config/Tassosoft/Cobro.conf
     # We use the QSettings convenience function beginWriteArray to write
-    # the array of comics as comics/1/name, comics/1/url, etc.
+    # the array of comics as comics/1/name, comics/1/url, etc. Before saving
+    # we use remove to clear everything in that group, because if we don't,
+    # deleted comics will come back like zombies next time we start up.
     def save(self, settings) :
         global comics
+        settings.beginGroup(u'comiclist')
+        settings.remove('')
+        settings.endGroup()
+        settings.sync() # not supposed to be needed but does no harm
+        settings.beginGroup(u'comiclist')
         settings.beginWriteArray(u'comics')
         for i in range(len(comics)) :
             settings.setArrayIndex(i)
             settings.setValue(u'name', QString(comics[i].name))
             settings.setValue(u'url', QString(comics[i].url))
-            settings.setValue(u'sha1', QString(comics[i].sha1))
+            settings.setValue(u'sha1', QByteArray(comics[i].sha1))
             settings.setValue(u'updays', QString(str(comics[i].updays)))
-            settings.setValue(u'lastviewed', QVariant(comics[i].lastviewed))
+            settings.setValue(u'lastread', QVariant(comics[i].lastread))
         settings.endArray()
-        settings.sync() # not supposed to be needed but does not harm
+        settings.endGroup()
+        settings.sync() # not supposed to be needed but does no harm
 
     # Load the comics list from the saved settings, see save() below. What we
     # get via QSettings.value is QStrings, which we convert to python while
@@ -482,21 +525,24 @@ class ConcreteListModel ( QAbstractListModel ) :
     def load(self, settings) :
         global comics, Comic
         self.beginResetModel()
+        settings.beginGroup(u'comiclist')
         count = settings.beginReadArray(u'comics')
         for i in range(count) :
             settings.setArrayIndex(i)
             name = settings.value(u'name').toString()
             url = settings.value(u'url').toString()
-            sha1 = settings.value(u'sha1').toString()
+            sha1 = settings.value(u'sha1').toByteArray()
             updays = settings.value(u'updays').toString()
             (lastread, ok) = settings.value(u'lastread').toInt()
             comic = Comic(n = unicode(name),
                           s = OLDCOMIC,
                           u = unicode(url),
-                          h = unicode(sha1),
+                          h = bytes(sha1),
                           d = unicode(updays),
                           l = lastread)
             comics.append(comic)
+        settings.endArray()
+        settings.endGroup()
         self.endResetModel()
 
     def flags(self, parent) :
@@ -555,8 +601,8 @@ class ConcreteListModel ( QAbstractListModel ) :
             day_letters = unicode(variant.toString())
             comic.updays = UpDays(day_letters)
             doSignal = False # no change to visible list view
-        elif role == LastViewRole :
-            (comic.lastviewed, ok) = variant.toInt()
+        elif role == LastReadRole :
+            (comic.lastread, ok) = variant.toInt()
             doSignal = False # no change to visible
         # If the visible list has changed, the list view should update.
         # The signal arguments are the top-left and bottom-right changed
@@ -617,7 +663,7 @@ class ConcreteListModel ( QAbstractListModel ) :
             PageRole : comic.page,
             HashRole : comic.sha1,
             DaysRole : str(comic.updays),
-            LastViewRole : comic.lastviewed
+            LastReadRole : comic.lastread
         }
         print('itemData row {0}'.format(index.row()))
         return item_dict
@@ -640,7 +686,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         comic.url = unicode( qdict[URLRole].toString() )
         comic.sha1 = unicode( qdict[HashRole].toString() )
         comic.updays = UpDays( unicode( qdict[DaysRole].toString() ) )
-        (comic.lastviewed, ok) = qdict[LastViewRole].toInt()
+        (comic.lastread, ok) = qdict[LastReadRole].toInt()
         return True
 
 # So, WTF is a custom delegate? A widget that represents a data item when
@@ -747,8 +793,6 @@ class ItemDelegate(QStyledItemDelegate):
 class CobroListView(QListView) :
     def __init__(self, model, browser, parent=None):
         super(CobroListView, self).__init__(parent)
-        # save the number of this day for marking comics lastviewed
-        self.today = datetime.date.toordinal(datetime.date.today())        
         # Save reference to our browser window for use in itemClicked
         self.webview = browser
         # Set all the many properties of a ListView/AbstractItemView in
@@ -803,7 +847,6 @@ class CobroListView(QListView) :
                 self.webview.page().triggerAction(QWebPage.Stop)
                 self.webview.setHtml( QString(comic.page), QUrl(QString(comic.url)) )
                 self.model().setData(index, QVariant(OLDCOMIC), StatusRole)
-                self.model().setData(index, QVariant(self.today), LastViewRole)
             else :
                 # No page data has been read, put up a default message
                 self.webview.setHtml( QString('''
@@ -927,6 +970,8 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         super(theAppWindow, self).__init__(parent)
         # Save the settings instance for use at shutdown (see below)
         self.settings = settings
+        # Here store the last-used directory to start file selection dialogs
+        self.starting_dir = u"."
         # Create the list model.
         self.model = ConcreteListModel()
         # Tell the list to load itself from the settings
@@ -985,9 +1030,13 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         #   Create the Delete action
         file_delete_action = QAction(u"Delete",self)
         file_delete_action.setShortcut(QKeySequence.Delete) # DEL key
-        file_delete_action.setToolTip(u"Delete the selected comic")
+        file_delete_action.setToolTip(u"Delete the selected comics")
         self.connect(file_delete_action, SIGNAL(u"triggered()"), self.delete)
         file_menu.addAction(file_delete_action)
+        #  Create the Export action
+        file_export_action = QAction(u"Export",self)
+        file_export_action.setToolTip(u"Export the selection comics")
+        self.connect(file_export_action, SIGNAL(u"triggered()"), self.export)
         self.setMenuBar(menubar)
         # Create our worker thread and start it. Connect its signal to the
         # slot in the model, and kick it off.
@@ -1081,6 +1130,13 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         # and that's it
         return
 
+    # Implement the File > Export action. Get the list of selected comic indexes.
+    # (If it is empty, return.) Ask the user to provide a file to write into.
+    # The starting directory is the last directory we've used for export or import.
+    # Write a text file with one line per selected comic.
+    def export(self) :
+        pass
+    
     # -----------------------------------------------------------------
     # reimplement QWidget::closeEvent() to save the current comics.
     def closeEvent(self, event):
@@ -1104,45 +1160,3 @@ if __name__ == "__main__":
     main.show()
     app.exec_()
     # c'est tout!
-'''
-TO DO
-
-X.  save window geometry during shutdown
-X.  restore window geometry on startup
-X.  implement model.save
-       means figuring out what keys to save
-X.  implement model.load
-X.  create days-of-week check-box class
-X.  add it to item editor and test
-X.  add File menu with Refresh command
-X.  move refresh out of temp code in item selected
-X. Make drag/drop reorder work
-9.  move refresh to a subtask
-    implies working out the lock code, prob. means adding mutex to Comic
-10. code startup refresh-all
-11. refresh-all skips any comic where it is not a scheduled update day
-    AND the last refresh was no more than 7 days back (i.e. if it has
-    been >7 days since a refresh do it anyway even if it isn't an updayt)
-    This implies adding a last-refresh date stamp to comic and saving it.
-12. finish File menu
-    X   New
-    X   Delete
-    c   Refresh
-    d   Export
-    e   Import
-XX. Comics load slow - 
-    X. add progress bar
-    X. study use of webpage/view: options? reset before sethtml?
-13. page-back, zoom in/out -- keys? buttons?
-XX. comics.com, gocomics, ucomics (all commercial) error out.
-15. ted rall fails unknown reason - now hangs - timeout?
-16. URL load error analysis and notification
-17. why plug-ins errors come out 
-
-
-date is:
-datetime.date.toordinal(datetime.date.today())
-734848
-
-
-'''
