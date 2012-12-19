@@ -139,6 +139,7 @@ from PyQt4.QtGui import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFont,
     QFontInfo,
     QKeySequence,
@@ -164,6 +165,8 @@ import collections # for deque
 import hashlib # for sha-1
 import datetime # for today numbers
 import urllib2 # for reading urls, duh
+import re # regular expressions
+import os # getcwd
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -560,7 +563,7 @@ class ConcreteListModel ( QAbstractListModel ) :
     # This method is called when Qt needs to (re)display the list data.
     # After initialization, that is only when scrolling or if data changes.
     def data(self, index, role) :
-        global comics, FontList
+        global comics, FontList, URLRole
         comic = comics[index.row()] # save a few method calls
         if role == Qt.DisplayRole :
             # Data for the visible comic, i.e. its name.
@@ -573,6 +576,10 @@ class ConcreteListModel ( QAbstractListModel ) :
         if (role == Qt.ToolTipRole) or (role == Qt.StatusTipRole) :
             # Data for the tooltip (pops up on hover) is the URL
             return QString(comic.url)
+        if role == URLRole :
+            return QString(comic.url)
+        if role == DaysRole :
+            return str(comic.updays)
         return QVariant()
 
     # setData is a standard list model method that receives a model index,
@@ -971,7 +978,7 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         # Save the settings instance for use at shutdown (see below)
         self.settings = settings
         # Here store the last-used directory to start file selection dialogs
-        self.starting_dir = u"."
+        self.starting_dir = os.getcwd()
         # Create the list model.
         self.model = ConcreteListModel()
         # Tell the list to load itself from the settings
@@ -1034,9 +1041,15 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         self.connect(file_delete_action, SIGNAL(u"triggered()"), self.delete)
         file_menu.addAction(file_delete_action)
         #  Create the Export action
-        file_export_action = QAction(u"Export",self)
-        file_export_action.setToolTip(u"Export the selection comics")
-        self.connect(file_export_action, SIGNAL(u"triggered()"), self.export)
+        file_export_action = QAction(u"Export selected",self)
+        file_export_action.setToolTip(u"Export the selected comics")
+        self.connect(file_export_action, SIGNAL(u"triggered()"), self.file_export)
+        file_menu.addAction(file_export_action)
+        #  Create the Import action
+        file_export_action = QAction(u"Import",self)
+        file_export_action.setToolTip(u"Import comic definitions from a file")
+        self.connect(file_export_action, SIGNAL(u"triggered()"), self.file_import)
+        file_menu.addAction(file_export_action)
         self.setMenuBar(menubar)
         # Create our worker thread and start it. Connect its signal to the
         # slot in the model, and kick it off.
@@ -1134,9 +1147,94 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
     # (If it is empty, return.) Ask the user to provide a file to write into.
     # The starting directory is the last directory we've used for export or import.
     # Write a text file with one line per selected comic.
-    def export(self) :
-        pass
-    
+    def file_export(self) :
+        # some text that we put in every file to document the syntax.
+        boilerplate = '''
+# A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
+# comic is defined on a single line by two or three quoted strings.
+# The first string is the comic name. The second string is its URL.
+# The optional third string is exactly seven letters long and stands for the days
+# of the week Monday to Sunday. A hyphen means "no update" and a non-hyphen
+# means "updates this day" so: 'Bug Comic', 'http://www.bugcomic.com', 'MTWTF--'
+# When the third string is omitted the default is "test for update every day".
+# The strings are delimited by 'single' or "double" quotes (sorry no guillemets)
+# and separated by spaces and/or commas. All lines that don't match are ignored
+# and can be used as commentary, like these lines.
+'''
+        ix_list = self.view.selectedIndexes()
+        nix = len(ix_list)
+        # If nothing is selected, bail. (To export-all, select all first)
+        if 0 == nix : return
+        msg = QString(u'Specify a text file to receive Comic definitions')
+        qpath = QFileDialog.getSaveFileName(self,msg,QString(self.starting_dir))
+        if qpath.isNull() : return # user cancelled dialog
+        ppath = unicode(qpath) # get python string.
+        self.starting_dir = os.path.dirname(ppath) # note starting dir for next time
+        try:
+            # python 3.3: fobj = open(ppath, 'w', encoding='iso-8859-1', errors='ignore')
+            fobj = open(ppath, 'w') # python 2.7
+        except :
+            return # can't open it? assume the OS has given a message
+        try:
+            fobj.write(boilerplate)
+            for ix in ix_list :
+                fobj.write("'{0}', '{1}', '{2}'\n".format(
+                    str(self.model.data(ix,Qt.DisplayRole) ),
+                    str(self.model.data(ix,URLRole) ),
+                    str(self.model.data(ix,DaysRole) ) ) )
+        finally:
+            fobj.close()
+
+    # Implement the File > Import action. Tell the view to clear the selection.
+    # As the user to specify a file to read. (Exit if cancel.) Use as the starting
+    # directory the last directory we've used. Read the file by lines, testing each
+    # against an RE. If the RE matches, create a new comic using the strings from the
+    # match. Look for a comic with the same name and replace it if found, or append.
+    def file_import(self) :
+        global comics
+        retext = '''^\s*['"]([^'"]+?)['"][ ,]+['"]([^']+?)['"]([ ,]+['"](\w{7})['"])?\s*$'''
+        line_test = re.compile(retext)
+        msg = QString(u'Choose a file of Comic definitions:')
+        qpath = QFileDialog.getOpenFileName(self,msg,QString(self.starting_dir))
+        if qpath.isNull() : return # user cancelled dialog
+        ppath = unicode(qpath) # get python string.
+        self.starting_dir = os.path.dirname(ppath) # note starting dir for next time
+        try:
+            fobj = open(ppath,'r',encoding='iso-8859-1',errors='ignore')
+        except:
+            return # can't open the file? screw it.
+        self.view.clearSelection()
+        try:
+            line = fobj.readline()
+            while len(line) :
+                line_match = line_test.match(line)
+                if line_match is not None:
+                    # we have a comic line, get its parts.
+                    line_name = line_match(1)
+                    line_url = line_match(2)
+                    line_days = line_match(4) if len(line_match(4)) else '-------'
+                    # see if it exists already. search directly in the list rather than
+                    # going all around the barn calling self.model.data().
+                    j = self.model.rowCount(QModelIndex())
+                    for i in range(j) :
+                        if comics[i].name == line_name :
+                            j = i
+                            break
+                    if j == self.model.rowCount(QModelIndex()) :
+                        # no match on name, append a row j
+                        self.model.insertRows(j,1,QModelIndex())
+                    # put the data from the line in the old or new Comic
+                    ix = self.model.createIndex(j,0) # create model index of new row
+                    self.model.setData( ix, QVariant(line_name), Qt.DisplayRole )
+                    self.model.setData( ix, QVariant(line_url), URLRole )
+                    self.model.setData( ix, QVariant(line_days), DaysRole )
+                line = fobj.readline()
+        finally:
+            fobj.close()
+                
+                
+            
+        
     # -----------------------------------------------------------------
     # reimplement QWidget::closeEvent() to save the current comics.
     def closeEvent(self, event):
