@@ -1,0 +1,25 @@
+
+# A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
+# comic is defined on a single line by two or three quoted strings.
+# The first string is the comic name. The second string is its URL.
+# The optional third string is exactly seven letters long and stands for the days
+# of the week Monday to Sunday. A hyphen means "no update" and a non-hyphen
+# means "updates this day" so: 'Bug Comic', 'http://www.bugcomic.com', 'MTWTF--'
+# When the third string is omitted the default is "test for update every day".
+# The strings are delimited by 'single' or "double" quotes (sorry no guillemets)
+# and separated by spaces and/or commas. All lines that don't match are ignored
+# and can be used as commentary, like these lines.
+
+* the following are always suitable for sub-teen readers. 
+* several, e.g. Agnes, Stone Soup, are major comics with newspaper distribution
+
+'Agnes', 'http://comics.com/agnes/', 'MTWTFSS'
+'Bug Comic', 'http://www.bugcomic.com/', '-------'
+'Candorville', 'http://candorville.com/', '-------'
+'Foxtrot', 'http://www.foxtrot.com/', '------S'
+'Free Range', 'http://www.gocomics.com/freerange', '-------'
+'Penny Arcade', 'http://www.penny-arcade.com/comic', 'MTWTFSS'
+'PhD Comics', 'http://www.phdcomics.com/comics.php', '-------'
+'Real Life', 'http://www.reallifecomics.com/', '-------'
+'Shoe', 'http://www.ucomics.com/shoe/', '-------'
+'Savage Chickens', 'http://www.savagechickens.com/', 'MTWTFSS'
