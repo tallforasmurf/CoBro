@@ -908,6 +908,22 @@ class CobroWebPage(QWebView) :
         self.connect( self, SIGNAL(u'loadStarted()'), self.startBar )
         self.connect( self, SIGNAL(u'loadProgress(int)'), self.rollBar )
         self.connect( self, SIGNAL(u'loadFinished(bool)'), self.endBar )
+	# Set up constants for key values so as not to bog down the keypress event.
+	#  - mask to turn off keypad indicator, making all plus/minus alike
+	self.keypadDeModifier = int(0xffffffff ^ Qt.KeypadModifier)
+	#  - ctl-minus is the only unambiguous zoom key
+	self.ctl_minus = Qt.ControlModifier | Qt.Key_Minus
+	#  - list of all keys zoom-related
+	self.zoomKeys = [Qt.ControlModifier | Qt.Key_Minus,
+	                 Qt.ControlModifier | Qt.Key_Equal,
+	                 Qt.ControlModifier | Qt.Key_Plus,
+	                 Qt.ShiftModifier | Qt.ControlModifier | Qt.Key_Equal,
+	                 Qt.ShiftModifier | Qt.ControlModifier | Qt.Key_Plus ]
+	self.backKeys = [Qt.ControlModifier | Qt.Key_B,
+	                 Qt.ControlModifier | Qt.Key_Left,
+	                 Qt.ControlModifier | Qt.Key_BracketLeft]
+	self.forwardKeys = [Qt.ControlModifier | Qt.Key_Right,
+	                    Qt.ControlModifier | Qt.Key_BracketRight]
         # Load a greeting message
         self.setHtml(QString(u'''<div style='text-align:center;'>
 <h2>Welcome to CoBro!</h2>
@@ -962,7 +978,36 @@ You can find a copy of the GNU General Public License at:
         if not ok : 
             self.statusLine.setText(u"Some error")
 
-    # TBS: capture key events to implement +/- zoom and back/forward
+    # Re-implement the parent's keyPressEvent in order to provide
+    # font-size-zoom from ctl-plus/minus, and browser back/forward.
+    # For the font size, we initialize the view at 16 points and
+    # the textSizeMultiplier at 1.0. Each time the user hits ctl-minus
+    # we deduct 0.0625 from the multiplier, and for each ctl-+ we add 0.0625
+    # (1/16) to the multiplier. This ought to cause the view to change up or
+    # down by about one point. We set a limit of 0.375 (6 points) at the low
+    # end and 4.0 (64 points) at the top.
+    def keyPressEvent(self, event):
+	kkey = int( int(event.modifiers()) & self.keypadDeModifier) | int(event.key())
+	if (kkey in self.zoomKeys) : # ctrl-plus/minus
+	    event.accept()
+	    zfactor = 0.0625 # zoom in
+	    if (kkey == self.ctl_minus) :
+		zfactor = -zfactor # zoom out
+	    zfactor += self.textZoomFactor
+	    if (zfactor > 0.374) and (zfactor < 4.0) :
+		self.textZoomFactor = zfactor
+		self.setTextSizeMultiplier(self.textZoomFactor)
+	elif (kkey in self.backKeys) :
+	    event.accept()
+	    if self.page().history().canGoBack() :
+		self.page().history().back()
+	elif (kkey in self.forwardKeys) :
+	    event.accept()
+	    if self.page().history().canGoForward() :
+		self.page().history().forward()
+	else: # not a key we support, so,
+	    event.ignore()
+	super(CobroWebPage, self).keyPressEvent(event)
 
     # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
     # Implement the application window incorporating the list and webview.
