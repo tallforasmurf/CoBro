@@ -928,7 +928,8 @@ class CobroWebPage(QWebView) :
         self.setHtml(QString(u'''<div style='text-align:center;'>
 <h2>Welcome to CoBro!</h2>
 <p>Use File &gt; New Comic to specify a comic by name and URL.</p>
-<p>Single-click a comic to display its page in this browser.</p>
+<p>Single-click a comic to display its page in this browser. When browsing,
+use ctl-[ for "back" and ctl-] for "forward" (cmd-[ and cmd-] on a mac).</p>
 <p>Double-click a comic to edit	its name, URL, or publication days.</p>
 <p>Change the list order by dragging and dropping.</p>
 <p>To "refresh" a comic means to read its web page and see if it is
@@ -940,6 +941,9 @@ If there is a problem reading it, its name is <strike>lined-out</strike>.</p>
 and hit File &gt; Refresh to read them again.</p>
 <p>Comic definitions are saved in some magic settings place
 (Registry, Library/Preferences, ~/.config)</p>
+<p>Use File > Export to write definitions of the selected comics to a text file.
+Use File > Import to read definitions from a text file and add them to the list
+(or to replace them when the name's the same).</p>
 <p>That's it! Enjoy!</p>
 <hr /><p>License (GPL-3.0):
 CoBro is free software: you can redistribute it and/or modify
