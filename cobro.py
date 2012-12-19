@@ -1118,7 +1118,7 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         global worker_working
         if worker_working :
             warningMsg("Cannot delete during refresh",
-                       "please wait until the refresh thread finishes")
+                       "please wait until the refresh process finishes")
             return
         ix_list = self.view.selectedIndexes()
         nix = len(ix_list)
@@ -1148,6 +1148,7 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
     # The starting directory is the last directory we've used for export or import.
     # Write a text file with one line per selected comic.
     def file_export(self) :
+        global comics, URLRole, DaysRole
         # some text that we put in every file to document the syntax.
         boilerplate = '''
 # A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
@@ -1191,8 +1192,12 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
     # against an RE. If the RE matches, create a new comic using the strings from the
     # match. Look for a comic with the same name and replace it if found, or append.
     def file_import(self) :
-        global comics
-        retext = '''^\s*['"]([^'"]+?)['"][ ,]+['"]([^']+?)['"]([ ,]+['"](\w{7})['"])?\s*$'''
+        global comics, URLRole, DaysRole, worker_working
+        if worker_working :
+            warningMsg("Cannot import during refresh",
+                       "please wait until the refresh process finishes")
+            return
+        retext = '''^\\s*[\'"]([^\'"]+?)[\'"][ ,]+[\'"]([^\']+?)[\'"]([ ,]+[\'"]([\\-A-Z]{7})[\'"])?\\s*$'''
         line_test = re.compile(retext)
         msg = QString(u'Choose a file of Comic definitions:')
         qpath = QFileDialog.getOpenFileName(self,msg,QString(self.starting_dir))
@@ -1200,7 +1205,8 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         ppath = unicode(qpath) # get python string.
         self.starting_dir = os.path.dirname(ppath) # note starting dir for next time
         try:
-            fobj = open(ppath,'r',encoding='iso-8859-1',errors='ignore')
+            # Python 3.3: fobj = open(ppath,'r',encoding='iso-8859-1',errors='ignore')
+            fobj = open(ppath,'rU')
         except:
             return # can't open the file? screw it.
         self.view.clearSelection()
@@ -1210,9 +1216,9 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
                 line_match = line_test.match(line)
                 if line_match is not None:
                     # we have a comic line, get its parts.
-                    line_name = line_match(1)
-                    line_url = line_match(2)
-                    line_days = line_match(4) if len(line_match(4)) else '-------'
+                    line_name = line_match.group(1)
+                    line_url = line_match.group(2)
+                    line_days = line_match.group(4) if len(line_match.group(4)) else '-------'
                     # see if it exists already. search directly in the list rather than
                     # going all around the barn calling self.model.data().
                     j = self.model.rowCount(QModelIndex())
