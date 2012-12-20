@@ -396,8 +396,9 @@ class WorkerBee ( QThread ) :
         self.emit(SIGNAL('statusChanged'), row, WORKING)
         comic = comics[row]
         days_since_read = self.ordinal_today - comic.lastread
-        if days_since_read > 7 :
-            # 7 or more days since the comic was checked, do read it.
+        if (days_since_read > 7) or (0 == len(comic.page))  :
+            # 7 or more days since the comic was checked -- or it hasn't been read
+	    # yet this run of the app -- so do fetch the page.
             read_it = True
         else:
             # 0 to 6 days since we read this comic. Want to test those days for 
@@ -524,7 +525,6 @@ class ConcreteListModel ( QAbstractListModel ) :
     # Load the comics list from the saved settings, see save() below. What we
     # get via QSettings.value is QStrings, which we convert to python while
     # creating the Comic instance.
-
     def load(self, settings) :
         global comics, Comic
         self.beginResetModel()
@@ -548,19 +548,27 @@ class ConcreteListModel ( QAbstractListModel ) :
         settings.endGroup()
         self.endResetModel()
 
+    # Here we implement the methods of QAbstractListModel class that convert this
+    # from an abstract list to a concrete one. First up, flags which tells the view
+    # what can be done with any given item. All items are enabled and allow editing,
+    # selecting, dragging. If the query is for the list parent, NOT an ordinary list
+    # item, we allow dropping as well. This is what enables drag-to-reorder the list.
     def flags(self, parent) :
         basic_flag = Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled | Qt.ItemIsEnabled
         if parent.isValid() :
             return basic_flag
         return basic_flag | Qt.ItemIsDropEnabled
 
+    # Next, rowCount just says how many rows there are in the model data. We use this
+    # from our own code later as well. Note the count of rows in an ordinary item is 0;
+    # only the count for the whole list is meaningful.
     def rowCount(self, parent):
         global comics
         if parent.isValid() :
             return 0
         return len(comics)
 
-    # This method is called when Qt needs to (re)display the list data.
+    # The data method is called when Qt needs to (re)display the list data.
     # After initialization, that is only when scrolling or if data changes.
     def data(self, index, role) :
         global comics, FontList, URLRole
@@ -582,10 +590,14 @@ class ConcreteListModel ( QAbstractListModel ) :
             return str(comic.updays)
         return QVariant()
 
-    # setData is a standard list model method that receives a model index,
-    # a role, and a QVariant of data for that role. It can be called from the
-    # edit delegate, to set the name and/or URL strings. Or it can be called
-    # from the statusChanged slot to change the status for the worker thread.
+    # setData is the normal means of modifying model data. The list view doesn't call
+    # it directly; it is called from the item delegate (below) when an item is edited,
+    # and also by our main window code to implement File>New Comic, after creating an
+    # empty Comic object. It is also called from the statusChanged slot to change the
+    # status of a comic on a signal from the worker thread. The result of that is the
+    # view will call data above to get the comic name and its font, changing the font
+    # to reflect the status.
+    # Input is a model index, a role, and a QVariant of data for that role.
     def setData(self, index, variant, role) :
         global comics, OLDCOMIC
         comic = comics[index.row()]
@@ -618,7 +630,8 @@ class ConcreteListModel ( QAbstractListModel ) :
             self.emit(SIGNAL('dataChanged(QModelIndex,QModelIndex)'),index,index)
 
     # This slot receives the statusChanged(row,stat) signal from the worker
-    # thread. It just passes that on to setData() above.
+    # thread. It just passes that on to setData() above. It sets the status and
+    # signals dataChanged, which makes the view repaint the item with a different font.
     def statusChangedSlot(self,row,status) :
         ix = self.createIndex(row,0)
         self.setData(ix, QVariant(status), StatusRole)
@@ -628,13 +641,9 @@ class ConcreteListModel ( QAbstractListModel ) :
     # an item is being refreshed -- which could invalidate the index that the
     # refresh thread is using -- these functions don't do anything unless the
     # refresh thread is sleeping.
-    #
-    # n.b. the numbering scheme used in Qt's row insert/removal corresponds
-    # perfectly to Python's slice notation.
-
     def insertRows(self, row, count, parent) :
         global Comic, comics, worker_working
-        print('insertRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
+        #print('insertRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
         if worker_working :
             return False
         # The worker thread is asleep and will not wake up until the user
@@ -656,6 +665,8 @@ class ConcreteListModel ( QAbstractListModel ) :
         self.endRemoveRows()
         return True
 
+    # The itemData method is a shortcut for the view when it is dragging an item:
+    # it calls itemData to get a collection of all an item's properties in one bag.
     # In the Qt docs, itemData returns a QMap, the Qt equivalent of a dict.
     # In PyQt, it just returns a dict. In this case, a dict that contains
     # all the fields of a given comic, so that setItemData can reproduce that
@@ -676,7 +687,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         return item_dict
 
     # Here we receive the data prepared by itemData() above. However by the
-    # time it comes here it has be Qt-ized: still a Python dict with keys that
+    # time it comes here it has been Qt-ized: still a Python dict with keys that
     # are ints (Role numbers) but the values are QVariants.
     #
     # The Qt docs say that setData() above must emit the dataChanged signal.
@@ -697,8 +708,10 @@ class ConcreteListModel ( QAbstractListModel ) :
         return True
 
 # So, WTF is a custom delegate? A widget that represents a data item when
-# when that item needs to be displayed or edited. We implement the custom
-# delegate in stage. First, a class UpDayWidget that encapsulates the Qt
+# when that item needs to be displayed or edited. When the user double-clicks an item
+# in the view, the view instantiates a custom delegate to display and optionally edit
+# the item's contents.
+# We implement this in stages. First, a class UpDayWidget that encapsulates the Qt
 # definition of 7 checkboxes with day name abbreviations above them, plus
 # methods for loading and reading-out the boxes.
 
@@ -795,7 +808,9 @@ class ItemDelegate(QStyledItemDelegate):
         model.setData( index, QVariant(str(edit_widget.udWidget.returnUpday())), DaysRole )
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-# Implement the view onto the above list model.
+# Implement the view onto the above list model. The QListView in Qt's scheme takes
+# on all the responsibility for displaying the list, keeping it up to date when the
+# model data changes, handling drag/drop, selecting and scrolling.
 
 class CobroListView(QListView) :
     def __init__(self, model, browser, parent=None):
@@ -930,19 +945,18 @@ class CobroWebPage(QWebView) :
 <p>Use File &gt; New Comic to specify a comic by name and URL.</p>
 <p>Single-click a comic to display its page in this browser. When browsing,
 use ctl-[ for "back" and ctl-] for "forward" (cmd-[ and cmd-] on a mac).</p>
-<p>Double-click a comic to edit	its name, URL, or publication days.</p>
 <p>Change the list order by dragging and dropping.</p>
+<p>Double-click a comic to edit	its name, URL, or publication days.</p>
 <p>To "refresh" a comic means to read its web page and see if it is
-different from the last time.
-While it is being read its name is <i>italic</i>.
-After reading, if it is different, its name turns <b>bold</b>.
-If there is a problem reading it, its name is <strike>lined-out</strike>.</p>
-<p>All comics are refreshed at startup. Or select one or more names
-and hit File &gt; Refresh to read them again.</p>
+different from the last time.</p><ul><li>
+While it is being read its name is <i>italic</i>.</li><li>
+After reading, if we think it is different from the last tiem, its name turns <b>bold</b>.
+</li><li>If there is a problem reading it, its name is <strike>lined-out</strike>.</li></ul>
+<p>All comics are refreshed at startup. Use File > Refresh to refresh a new or edited comic.</p>
 <p>Comic definitions are saved in some magic settings place
 (Registry, Library/Preferences, ~/.config)</p>
-<p>Use File > Export to write definitions of the selected comics to a text file.
-Use File > Import to read definitions from a text file and add them to the list
+<p>Use File > Export to write definitions of the selected comics to a text file.</p>
+<p>Use File > Import to read definitions from a text file and add them to the list
 (or to replace them when the name's the same).</p>
 <p>That's it! Enjoy!</p>
 <hr /><p>License (GPL-3.0):
@@ -1013,14 +1027,14 @@ You can find a copy of the GNU General Public License at:
 	    event.ignore()
 	super(CobroWebPage, self).keyPressEvent(event)
 
-    # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # Implement the application window incorporating the list and webview.
-    # The one class of this object also catches shut-down.
-    #
-    # In order to have a standard menu bar we have to use QMainWindow.
-    # That class requires us to supply the real window contents as a widget
-    # (not just a layout) so we create that widget first.
-    #
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# Implement the application window incorporating the list and webview.
+# The one class of this object also catches shut-down.
+#
+# In order to have a standard menu bar we have to use QMainWindow.
+# That class requires us to supply the real window contents as a widget
+# (not just a layout) so we create that widget first.
+#
 class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
     def __init__(self, settings, parent=None) :
         super(theAppWindow, self).__init__(parent)
