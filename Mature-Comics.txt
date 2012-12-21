@@ -29,7 +29,7 @@
 'SMBC', 'http://www.smbc-comics.com/', '-------'
 'Toothpaste For Dinner', 'http://www.toothpastefordinner.com/', '-------'
 'Tree Lobsters', 'http://www.treelobsters.com/', '-------'
-'The Strip', 'www.nytimes.com/thestrip', '------S'
+'The Strip', 'http://www.nytimes.com/thestrip', '------S'
 'Buttersafe', 'http://buttersafe.com', '-T-T---'
 'Hark! A Vagrant!', 'http://www.harkavagrant.com/index.php', '-------'
 'Robbie and Bobbie', 'http://robbieandbobby.com/', 'M------'
@@ -42,3 +42,7 @@
 'Squid Row', 'http://squidrowcomics.com', 'MTWTFSS'
 'Two Guys and a Guy', 'http://www.twogag.com', 'M-W-F--'
 'Dork Toes', 'http://dorktoescomic.com/', '-T-----'
+
+# note apostrophe in "Fredo and Pid'Jin" is a big no-no!!!
+'Fredo and Pidjin', 'http://www.pidjin.net/', '--W----'
+'Girls with Slingshots', 'http://www.girlswithslingshots.com/', 'MTWTF--'

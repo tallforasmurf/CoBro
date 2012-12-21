@@ -22,4 +22,5 @@
 'PhD Comics', 'http://www.phdcomics.com/comics.php', '-------'
 'Real Life', 'http://www.reallifecomics.com/', '-------'
 'Shoe', 'http://www.ucomics.com/shoe/', '-------'
+'Stone Soup', 'http://www.gocomics.com/stonesoup', 'MTWTFSS'
 'Savage Chickens', 'http://www.savagechickens.com/', 'MTWTFSS'
