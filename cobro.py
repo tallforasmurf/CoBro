@@ -165,8 +165,10 @@ import collections # for deque
 import hashlib # for sha-1
 import datetime # for today numbers
 import urllib2 # for reading urls, duh
+# Python 3.3 : import urllib
 import re # regular expressions
 import os # getcwd
+import io # stringIO
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -378,16 +380,20 @@ class WorkerBee ( QThread ) :
                 worker_waits.wait(work_queue_lock)
 
     # Process one Comic: Signal the main thread to update status to WORKING.
-    # Test whether: 
-    #    it is an upday for this comic, or 
-    #    7 days have passed since it was last read, or
-    #    an upday has passed since it was last read.
-    # If not, there is no need to update the page and the hash, so signal it
-    # as OLDCOMIC and exit.
-    # Else, read the page at its URL. If any error, signal status of BADCOMIC & exit.
-    # Compute the page hash and compare to the old hash.
-    # If different, save the new hash and signal status of NEWCOMIC.
-    # Else signal OLDCOMIC status.
+    # We will read the comic page no matter its status, because the user might
+    # want to view even an old comic. But check its hash against the last-read hash,
+    # which is an expensive process, if:
+    #  - Today is an update-day for this comic
+    #  - Or, an update-day has passed since we last read it
+    # If neither is true, there is no need to update the hash, so
+    # signal the main thread to mark it as OLDCOMIC and exit.
+    # Read the page at its URL again. If any error, signal status of BADCOMIC & exit.
+    # Now compute the page hash line by line, using
+    # only those lines that are the same between the two copies. This eliminates
+    # from the hash, those lines that change arbitrarily between fetches.
+    #
+    # If the new page hash differs from the old hash, save the new hash and
+    # tell the main thread to mark it NEWCOMIC -- else, OLDCOMIC.
 
     def process_one(self, ix) :
         global read_url, OLDCOMIC, NEWCOMIC, BADCOMIC, WORKING
@@ -395,12 +401,17 @@ class WorkerBee ( QThread ) :
         row = ix.row()
         self.emit(SIGNAL('statusChanged'), row, WORKING)
         comic = comics[row]
+	# Read the comic page once and save it, no matter status
+	page1 = self.read_url(comic)
+	comic.page = page1
+	# Now, do we test the hash?
+	if 0 == len(page1) :
+	    # some problem reading the comic, mark it bad and quit.
+	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
+	    return
         days_since_read = self.ordinal_today - comic.lastread
-        if (days_since_read > 7) or (0 == len(comic.page))  :
-            # 7 or more days since the comic was checked -- or it hasn't been read
-	    # yet this run of the app -- so do fetch the page.
-            read_it = True
-        else:
+	read_it = False # will we or won't we?
+        if days_since_read < 7 :
             # 0 to 6 days since we read this comic. Want to test those days for 
             # update-days. Suppose it has been 5 days and today is Wednesday (day 2)
             # we want to test days 2, 1, 0, 6, 5 in order. We could stop at the first
@@ -408,18 +419,40 @@ class WorkerBee ( QThread ) :
             read_it = comic.updays.testDay(self.day_of_week) # is TODAY an update day?
             for i in range (days_since_read) :
                 read_it |= comic.updays.testDay( (self.day_of_week - i) % 7 )
+	else :
+	    # 7 or more days since comic was read, just read it.
+	    read_it = True
         if not read_it : 
-            # not an update day and recently seen
+            # not an update day and recently tested
             self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
             return
-        if not self.read_url(comic) :
-            # some problem reading the comic, mark it bad and quit
-            self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
-            return
-        # Successful read, set the date of the new hash we are about to make
-        comic.lastread = self.ordinal_today
+	# Read it again.
+	page2 = self.read_url(comic)
+	if 0 ==len(page2) :
+	    # some problem reading the comic a second time. We did get one good
+	    # read out of it, so we have that string for display. But mark it BADCOMIC
+	    # and don't update the hash or the last-read date.
+	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
+	    return
+	# We have two copies of the page. Read them by lines and where the lines are
+	# the same, stuff them into the hash machine. Thus the hash will be based on
+	# the lines that are constant today, and not be polluted by the arbitrary
+	# "random comic" links or sql query counts or what-not.
+	comic.lastread = self.ordinal_today # date of the new hash
         sha1 = self.hash.copy() # make a new, empty hash gizmo
-        sha1.update(comic.page) # feed it the page we just read
+	# open page1 and page2 as file-like objects
+	fpage1 = io.StringIO(page1)
+	fpage2 = io.StringIO(page2)
+	f1 = fpage1.readline()
+	print(comic.name)
+	while len(f1) :
+	    f2 = fpage2.readline()
+	    if f1 == f2 :
+		sha1.update(f1.encode(u'ISO-8859-1','xmlcharrefreplace'))
+	    else :
+		print('f1: '+f1)
+		print('f2: '+f2)
+	    f1 = fpage1.readline()
         new_hash = bytes(sha1.digest()) # save the resulting hash signature
         if comic.sha1 != new_hash :
             # The comic's web page has changed since it was seen.
@@ -430,38 +463,39 @@ class WorkerBee ( QThread ) :
             self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
         return
 
-    # Given a comic, read the single html page at its url and save it in
-    # the comic's page string. Note that the commercial sites (comics.com,
-    # ucomics.com, gocomics.com) will not reply without a valid user-agent
-    # string. The solo sites (smbc, xkcd etc) don't seem to care.
+    # Given a comic, read the single html page at its url and return the page as
+    # a UNICODE string. Note that the commercial sites (comics.com, ucomics.com,
+    # gocomics.com) will not reply without a valid user-agent string. The solo sites
+    # (smbc, xkcd etc) don't seem to care.
+    # Python 3: changes below as noted
     
     def read_url(self,comic) :    
         if 0 == len(comic.url) : # URL is a null string
             return False # couldn't read that
         try:
             # Create an http "request" object and load it with a user-agent
+	    # ureq = urllib.request.Request(comic.url)
             ureq = urllib2.Request(comic.url)
             ureq.add_header('User-agent', 'Mozilla/5.0')
             # Execute the request by opening it, returning a "file" to the page
             furl = urllib2.urlopen(ureq)
         except:
-            # failed to open the URL: return False and do not change
-            # the page value. TBS: error analysis and user notification!
-            return False
+            # failed to open the URL: return a null byte string.
+	    # TBS: error analysis and user notification!
+            return unicode('')
         # opened the URL, now read it and convert to a u-string.
         # TBS: we need to read the first 1K bytes and look for
         # an "encoding=whatever" and read the rest using that encoding,
         # but for now just assume it's good old Latin-1.
         encoding = u'ISO-8859-1'
-        comic.page = b''
         try:
-            comic.page = bytes(furl.read())
+            page = unicode(furl.read(),encoding,'ignore')
         except:
             # TBS: error analysis and user notification (status bar?)
-            pass
+            page = unicode('')
         finally:
             furl.close()
-        return 0 != len(comic.page)
+        return page
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the concrete list model by subclassing QAbstractListModel
