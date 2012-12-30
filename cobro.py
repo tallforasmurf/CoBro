@@ -443,16 +443,16 @@ class WorkerBee ( QThread ) :
 	# open page1 and page2 as file-like objects
 	fpage1 = io.StringIO(page1)
 	fpage2 = io.StringIO(page2)
-	f1 = fpage1.readline()
-	print(comic.name)
+	f1 = fpage1.readline().strip()
+	#print(comic.name)
 	while len(f1) :
-	    f2 = fpage2.readline()
+	    f2 = fpage2.readline().strip()
 	    if f1 == f2 :
 		sha1.update(f1.encode(u'ISO-8859-1','xmlcharrefreplace'))
-	    else :
-		print('f1: '+f1)
-		print('f2: '+f2)
-	    f1 = fpage1.readline()
+	    #else :
+		#print('f1: '+f1)
+		#print('f2: '+f2)
+	    f1 = fpage1.readline().strip()
         new_hash = bytes(sha1.digest()) # save the resulting hash signature
         if comic.sha1 != new_hash :
             # The comic's web page has changed since it was seen.
