@@ -46,3 +46,4 @@
 # note apostrophe in "Fredo and Pid'Jin" is a big no-no!!!
 'Fredo and Pidjin', 'http://www.pidjin.net/', '--W----'
 'Girls with Slingshots', 'http://www.girlswithslingshots.com/', 'MTWTF--'
+'Ctrl-Alt-Del', 'http://www.cad-comic.com/', 'M-W-F--'
