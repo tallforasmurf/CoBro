@@ -927,9 +927,57 @@ class CobroListView(QListView) :
 # Implement the web page display, based on QWebView with added behaviors.
 # Initialize it with welcome/usage/license message.
 #
+# The following is the html for the welcome screen shown on startup.
+WelcomeScreen = QString(u'''
+<div style='text-align:center; height:6em; background-color:#444; color:#E0E; border:2px solid black;'>
+<h2>Welcome to CoBro!</h2>
+</div>
+<p>Single-click a comic name to display its page in this browser.</p>
+<p>Use File&gt;New Comic to add a comic to the list by name and URL.
+No comics in the list? Start by adding these:</p>
+<table style='border-collapse:collapse; width:80%;margin:auto;'>
+<tr><td>Comic name</td><td>Comic URL</td><td>Updates</td></tr>
+<tr><td>XKCD</td><td>http://xkcd.com/</td><td>unpredictable, leave blank</td></tr>
+<tr><td>Bug Comic</td><td>http://www.bugcomic.com</td><td>weekdays</td></tr>
+<tr><td>Megacynics</td><td>http://www.megacynics.com/</td><td>M-W-F</td></tr>
+<tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td><td>Sunday only</td></tr>
+</table>
+<p>That's enough! Find all the nationally-syndicated (newspaper) cartoons at
+<a href='http://comics.com/'>Comics.com</a>. Then just
+put "best web comics" in a search engine and explore! There are thousands!</p>
+<p>Change the list order by dragging and dropping.</p>
+<p>Double-click a comic to edit	its name, URL, or publication days.</p>
+<p>To "refresh" a comic means to read its web page and see if it is
+different from the last time.</p><ul><li>
+While it is being read its name is <i>italic</i>.</li>
+<li>After reading, if we think it is different from the last time,
+its name turns <b>bold</b>.</li>
+<li>If there is a problem reading it, its name is <strike>lined-out</strike>.</li>
+</ul>
+<p>All comics are refreshed at startup. Use File&gt;Refresh to refresh a new or edited comic.</p>
+<p>While browsing, use ctl-[ for "back" and ctl-] for "forward"
+(cmd-[ and cmd-] on a mac).</p>
+<p>Comic definitions are saved in some magic settings place depending your OS 
+(Registry, Library/Preferences, ~/.config)</p>
+<p>Use File&gt;Export to write definitions of the selected comics to a text file.</p>
+<p>Use File&gt;Import to read definitions from a text file and add them to the list
+(or to replace them, when the name's the same).</p>
+<p>That's it! Enjoy!</p>
+<hr /><p>License (GPL-3.0):
+CoBro is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version. This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You can find a copy of the GNU General Public License at:
+<a href='http://www.gnu.org/licenses/'>www.gnu.org/licenses/</a>.</p>	
+                             ''')
+
 class CobroWebPage(QWebView) :
     def __init__(self, status, bar, parent=None) :
-        global FontList, OLDCOMIC
+        global FontList, OLDCOMIC, WelcomeScreen
         super(CobroWebPage, self).__init__(parent)
         self.statusLine = status
         self.needUrlStatus = False
@@ -974,36 +1022,7 @@ class CobroWebPage(QWebView) :
 	self.forwardKeys = [Qt.ControlModifier | Qt.Key_Right,
 	                    Qt.ControlModifier | Qt.Key_BracketRight]
         # Load a greeting message
-        self.setHtml(QString(u'''<div style='text-align:center;'>
-<h2>Welcome to CoBro!</h2>
-<p>Use File &gt; New Comic to specify a comic by name and URL.</p>
-<p>Single-click a comic to display its page in this browser. When browsing,
-use ctl-[ for "back" and ctl-] for "forward" (cmd-[ and cmd-] on a mac).</p>
-<p>Change the list order by dragging and dropping.</p>
-<p>Double-click a comic to edit	its name, URL, or publication days.</p>
-<p>To "refresh" a comic means to read its web page and see if it is
-different from the last time.</p><ul><li>
-While it is being read its name is <i>italic</i>.</li><li>
-After reading, if we think it is different from the last tiem, its name turns <b>bold</b>.
-</li><li>If there is a problem reading it, its name is <strike>lined-out</strike>.</li></ul>
-<p>All comics are refreshed at startup. Use File > Refresh to refresh a new or edited comic.</p>
-<p>Comic definitions are saved in some magic settings place
-(Registry, Library/Preferences, ~/.config)</p>
-<p>Use File > Export to write definitions of the selected comics to a text file.</p>
-<p>Use File > Import to read definitions from a text file and add them to the list
-(or to replace them when the name's the same).</p>
-<p>That's it! Enjoy!</p>
-<hr /><p>License (GPL-3.0):
-CoBro is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version. This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-You can find a copy of the GNU General Public License at:
-<a href='http://www.gnu.org/licenses/'>www.gnu.org/licenses/</a>.</p>	
-                             '''))
+        self.setHtml(WelcomeScreen)
     # Slot to receive the loadStarted signal: clear the bar to zero and show
     # the url in the status line. Problem: at loadStarted time, self.url()
     # returns the *previous* url, not the one actually being started. So to
@@ -1053,6 +1072,8 @@ You can find a copy of the GNU General Public License at:
 	    event.accept()
 	    if self.page().history().canGoBack() :
 		self.page().history().back()
+	    else:
+		self.setHtml(WelcomeScreen)
 	elif (kkey in self.forwardKeys) :
 	    event.accept()
 	    if self.page().history().canGoForward() :
