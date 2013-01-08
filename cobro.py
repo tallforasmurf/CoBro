@@ -401,6 +401,7 @@ class WorkerBee ( QThread ) :
         row = ix.row()
         self.emit(SIGNAL('statusChanged'), row, WORKING)
         comic = comics[row]
+	print(comic.name)
 	# Read the comic page once and save it, no matter status
 	page1 = self.read_url(comic)
 	comic.page = page1
@@ -409,6 +410,7 @@ class WorkerBee ( QThread ) :
 	    # some problem reading the comic, mark it bad and quit.
 	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
 	    return
+	print('  read 1')
         days_since_read = self.ordinal_today - comic.lastread
 	read_it = False # will we or won't we?
         if days_since_read < 7 :
@@ -428,6 +430,7 @@ class WorkerBee ( QThread ) :
             return
 	# Read it again.
 	page2 = self.read_url(comic)
+	print('  read 2')
 	if 0 ==len(page2) :
 	    # some problem reading the comic a second time. We did get one good
 	    # read out of it, so we have that string for display. But mark it BADCOMIC
@@ -443,24 +446,26 @@ class WorkerBee ( QThread ) :
 	# open page1 and page2 as file-like objects
 	fpage1 = io.StringIO(page1)
 	fpage2 = io.StringIO(page2)
-	f1 = fpage1.readline().strip()
-	#print(comic.name)
+	f1 = fpage1.readline()
 	while len(f1) :
+	    f1 = f1.strip()
 	    f2 = fpage2.readline().strip()
 	    if f1 == f2 :
 		sha1.update(f1.encode(u'ISO-8859-1','xmlcharrefreplace'))
-	    #else :
-		#print('f1: '+f1)
-		#print('f2: '+f2)
-	    f1 = fpage1.readline().strip()
+	    else :
+		print('    f1: '+f1)
+		print('    f2: '+f2)
+	    f1 = fpage1.readline()
         new_hash = bytes(sha1.digest()) # save the resulting hash signature
         if comic.sha1 != new_hash :
             # The comic's web page has changed since it was seen.
             comic.sha1 = new_hash
             self.emit(SIGNAL('statusChanged'), row, NEWCOMIC)
+	    print('  new')
         else :
             # it has not changed.
             self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
+	    print('  old')
         return
 
     # Given a comic, read the single html page at its url and return the page as
@@ -1201,7 +1206,9 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         worker_waits.wakeOne()
             
 
-    # Implement the File > New Comic action: Create a custom dialog based on
+    # Implement the File > New Comic action
+    # We can't start if a refresh is in progress, because insertRows won't work.
+    # But if the worker thread is quiescent, create a custom dialog based on
     # the same edit widget as used by the custom delegate, but augmented with
     # OK and Cancel buttons. Display it. If the dialog is accepted, call the
     # model's insertRows method to add a row at the end, then load that empty
@@ -1209,6 +1216,10 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
     # is running.
 
     def newComic(self) :
+	global worker_working
+	if worker_working :
+	    warningMsg(u'Sorry, Update in progress','Please wait until all refreshes are done')
+	    return
         dlg = QDialog(self, Qt.Dialog)
         edw = EditWidget()
         bts = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -1221,11 +1232,12 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         ans = dlg.exec_()
         if ans == QDialog.Accepted :
             j = self.model.rowCount(QModelIndex()) # count of rows now
-            self.model.insertRows(j,1,QModelIndex()) # append new row
-            ix = self.model.createIndex(j,0) # create model index of new row
-            self.model.setData( ix, QVariant(edw.nameEdit.text()), Qt.DisplayRole )
-            self.model.setData( ix, QVariant(edw.urlEdit.text()), URLRole )
-            self.model.setData( ix, QVariant(str(edw.udWidget.returnUpday())), DaysRole )
+            self.model.insertRows(j,1,QModelIndex())
+	    ix = self.model.createIndex(j,0) # create model index of new row
+	    self.model.setData( ix, QVariant(edw.nameEdit.text()), Qt.DisplayRole )
+	    self.model.setData( ix, QVariant(edw.urlEdit.text()), URLRole )
+	    self.model.setData( ix, QVariant(str(edw.udWidget.returnUpday())), DaysRole )
+		
 
     # Implement the File > Delete action: Make sure the refresh worker
     # isn't running. Get the current selection as a list of model indexes.
