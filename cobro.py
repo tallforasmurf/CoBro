@@ -481,20 +481,22 @@ class WorkerBee ( QThread ) :
             # Create an http "request" object for the URL
             ureq = urllib2.Request(comic.url)
 	    # The commercial (comics.com) sites won't respond without a proper agent
-            ureq.add_header('User-agent', 'Mozilla/5.0')
+	    # Popsickle Strip gives a 406 error unless the renderer is included
+            ureq.add_header('User-agent', 'Mozilla/5.0 AppleWebKit')
 	    # Blog-based sites reject us with 403 unless we have this:
 	    ureq.add_header('Accept', 'text/html')	    
 	    #print('    -- opening '+comic.url)
-            # Execute the request by opening it, creating a "file" to the page
-            furl = urllib2.urlopen(ureq)
+            # Execute the request by opening it, creating a "file" to the page.
+	    # Use a 3-second timeout to avoid hang-like conditions.
+            furl = urllib2.urlopen(ureq,None,3)
 	except urllib2.HTTPError as ugh :
-	    comic.error='URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.msg))
+	    comic.error='URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.msg)
 	    return u''
 	except urllib2.URLError as ugh :
-	    comic.error='URL open failed: URLError: ' + str(ugh.reason))
+	    comic.error='URL open failed: URLError: ' + str(ugh.reason)
 	    return u''
 	except Exception as wtf :
-	    comic.error='URL open failed: '+str(wtf.args))
+	    comic.error='URL open failed: '+str(wtf.args)
 	    return u''
         # opened the URL, now read it and convert to a u-string.
         # TBS: we need to read the first 1K bytes and look for
@@ -904,31 +906,32 @@ class CobroListView(QListView) :
     # a mouseReleaseEvent when the mouse is over a list item (and not over
     # something else, like a scrollbar). This is the time to display the
     # item URL in our web browser.
-
     def itemClicked(self, index) :
         global comics, OLDCOMIC, NEWCOMIC, BADCOMIC, StatusRole, LastViewRole
         comic = comics[index.row()]
+	self.webview.page().triggerAction(QWebPage.Stop)
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
             # so, not a bad comic or a working comic
             if len(comic.page) :
                 # Pass the current page data into our web viewer. First tell
                 # it to stop, if it happens to be loading something else.
-                self.webview.page().triggerAction(QWebPage.Stop)
                 self.webview.setHtml( QString(comic.page), QUrl(QString(comic.url)) )
                 self.model().setData(index, QVariant(OLDCOMIC), StatusRole)
             else :
-                # No page data has been read, put up a default message
-                self.webview.setHtml( QString('''
-		<p style='text-align:center;margin-top:8em;'>
-		Sorry, I have no data for this comic. Try refreshing it.
-		</p>'''),QUrl())
+                # No page data has been read -- perhaps this is a new comic 
+		# just added? Put up an explanation in the browser window.
+		msg = '''<p style='text-align:center;margin-top:8em;'>
+		Sorry, I have no data for this comic. Try refreshing it.</p>'''
+                self.webview.setHtml( QString(msg),QUrl())
         elif comic.status == BADCOMIC :
-            # Comic had an error on the last refresh
-            self.webview.setHtml( QString('''
+            # Comic had an error on the last refresh, put up an explanation
+	    # with error message in the browser window.
+	    msg = '''
 	    <p style='text-align:center;margin-top:8em;'>
-	    Sorry, there was some problem reading the URL for that comic.
-	    Try refreshing it or test its URL in another browser.</p>'''),
-                                  QUrl())
+	    Sorry, there was some problem reading the URL for that comic.<br />
+	    ({0})<br />
+	    Try refreshing it or test its URL in another browser.</p>'''.format(comic.error)
+            self.webview.setHtml( QString(msg), QUrl())
         else:
             # Comic is being refreshed
             self.webview.setHtml( QString('''
