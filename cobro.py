@@ -293,6 +293,7 @@ class Comic() :
         self.sha1 = bytes(h)
         self.updays = UpDays(d)
         self.lastread = l
+	self.error = u''
 
 #
 # The list is initialized at startup, see ConcreteListModel.load()
@@ -410,7 +411,7 @@ class WorkerBee ( QThread ) :
 	    # some problem reading the comic, mark it bad and quit.
 	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
 	    return
-	print('  read 1')
+	#print('  read 1')
         days_since_read = self.ordinal_today - comic.lastread
 	read_it = False # will we or won't we?
         if days_since_read < 7 :
@@ -430,7 +431,7 @@ class WorkerBee ( QThread ) :
             return
 	# Read it again.
 	page2 = self.read_url(comic)
-	print('  read 2')
+	#print('  read 2')
 	if 0 ==len(page2) :
 	    # some problem reading the comic a second time. We did get one good
 	    # read out of it, so we have that string for display. But mark it BADCOMIC
@@ -469,25 +470,32 @@ class WorkerBee ( QThread ) :
         return
 
     # Given a comic, read the single html page at its url and return the page as
-    # a UNICODE string. Note that the commercial sites (comics.com, ucomics.com,
-    # gocomics.com) will not reply without a valid user-agent string. The solo sites
-    # (smbc, xkcd etc) don't seem to care.
+    # a UNICODE string. If an error occurs, put an informative string in comic.error.
     # Python 3: changes below as noted
     
     def read_url(self,comic) :    
-        if 0 == len(comic.url) : # URL is a null string
-            return False # couldn't read that
+        if 0 == len(comic.url.strip()) : # URL is a null or empty string
+	    comic.error = u'Empty URL string'
+            return u'' # couldn't read that
         try:
-            # Create an http "request" object and load it with a user-agent
-	    # ureq = urllib.request.Request(comic.url)
+            # Create an http "request" object for the URL
             ureq = urllib2.Request(comic.url)
+	    # The commercial (comics.com) sites won't respond without a proper agent
             ureq.add_header('User-agent', 'Mozilla/5.0')
-            # Execute the request by opening it, returning a "file" to the page
+	    # Blog-based sites reject us with 403 unless we have this:
+	    ureq.add_header('Accept', 'text/html')	    
+	    #print('    -- opening '+comic.url)
+            # Execute the request by opening it, creating a "file" to the page
             furl = urllib2.urlopen(ureq)
-        except:
-            # failed to open the URL: return a null byte string.
-	    # TBS: error analysis and user notification!
-            return unicode('')
+	except urllib2.HTTPError as ugh :
+	    comic.error='URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.msg))
+	    return u''
+	except urllib2.URLError as ugh :
+	    comic.error='URL open failed: URLError: ' + str(ugh.reason))
+	    return u''
+	except Exception as wtf :
+	    comic.error='URL open failed: '+str(wtf.args))
+	    return u''
         # opened the URL, now read it and convert to a u-string.
         # TBS: we need to read the first 1K bytes and look for
         # an "encoding=whatever" and read the rest using that encoding,
@@ -495,8 +503,8 @@ class WorkerBee ( QThread ) :
         encoding = u'ISO-8859-1'
         try:
             page = unicode(furl.read(),encoding,'ignore')
-        except:
-            # TBS: error analysis and user notification (status bar?)
+        except Exception as ugh:
+	    comic.error='Read of open URL failed: '+str(ugh.args)
             page = unicode('')
         finally:
             furl.close()
@@ -1367,10 +1375,7 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
                 line = fobj.readline()
         finally:
             fobj.close()
-                
-                
-            
-        
+
     # -----------------------------------------------------------------
     # reimplement QWidget::closeEvent() to save the current comics.
     def closeEvent(self, event):
