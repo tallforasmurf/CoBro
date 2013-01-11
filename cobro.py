@@ -938,7 +938,29 @@ class CobroListView(QListView) :
 	    <p style='text-align:center;margin-top:8em;'>
 	    I'm working on it, alright? Geez, gimme a sec...</p>'''),
                                   QUrl())
-
+    
+    # Override the dataChanged slot in order to redisplay a web page, in the
+    # event that the item being changed is exactly the one item selected, and
+    # its status is OLD, NEW or BAD. In that case, use self.itemClicked to 
+    # start a redisplay of its html.
+    def dataChanged(self, topLeft, bottomRight ) :
+	top_left_row = topLeft.row()
+	if top_left_row == bottomRight.row() :
+	    # just one item being changed
+	    selection = self.selectedIndexes()
+	    if len(selection) == 1 :
+		# just one item is selected
+		sel_item = selection[0]
+		if sel_item.row() == top_left_row :
+		    # that item is the one item currently highlited in the list
+		    # is it in displayable state (or is it "working" or invalid)?
+		    comic = comics[top_left_row]
+		    if comic.status in [NEWCOMIC, BADCOMIC, OLDCOMIC] :
+			# yeah, so update the html display
+			self.itemClicked(sel_item)
+	# irregardless, pass the signal on to the parent
+	super(CobroListView,self).dataChanged(topLeft, bottomRight)
+	
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the web page display, based on QWebView with added behaviors.
 # Initialize it with welcome/usage/license message.
@@ -1185,8 +1207,8 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         self.connect(file_export_action, SIGNAL(u"triggered()"), self.file_import)
         file_menu.addAction(file_export_action)
         self.setMenuBar(menubar)
-        # Create our worker thread and start it. Connect its signal to the
-        # slot in the model, and kick it off.
+        # Create our worker thread and start it. Connect its signal to slots in both
+        # the concrete model and the list view, and kick it off.
         self.worker = WorkerBee()
         self.connect(self.worker,SIGNAL('statusChanged'),
                      self.model.statusChangedSlot)
