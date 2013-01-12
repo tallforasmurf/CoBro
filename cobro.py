@@ -170,6 +170,15 @@ import re # regular expressions
 import os # getcwd
 import io # stringIO
 
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# some global constants
+URLTIMEOUT = 5 # timeout for urllib2.urlopen
+GLOBALTIMEOUT = 10.0 # socket.setdefaulttimeout value
+# The status values of a comic.
+OLDCOMIC = 0 # status of previously-seen comic
+NEWCOMIC = 1 # status of an un-viewed comic (name in bold)
+BADCOMIC = 2 # status when URL couldn't be read (name strikethrough)
+WORKING = 3  # status while reading a url (name in italic)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Some message routines.
@@ -204,13 +213,6 @@ def okCancelMsg ( text, info = None ):
     mb.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
     return QMessageBox.Ok == mb.exec_()
 
-# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-# Set up global variables:  First, the status values of a comic.
-
-OLDCOMIC = 0 # status of previously-seen comic
-NEWCOMIC = 1 # status of an un-viewed comic (name in bold)
-BADCOMIC = 2 # status when URL couldn't be read (name strikethrough)
-WORKING = 3  # status while reading a url (name in italic)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Find out the nearest font to Comic Sans and store four versions of it
@@ -473,7 +475,8 @@ class WorkerBee ( QThread ) :
     # a UNICODE string. If an error occurs, put an informative string in comic.error.
     # Python 3: changes below as noted
     
-    def read_url(self,comic) :    
+    def read_url(self,comic) :   
+	global URLTIMEOUT
         if 0 == len(comic.url.strip()) : # URL is a null or empty string
 	    comic.error = u'Empty URL string'
             return u'' # couldn't read that
@@ -488,7 +491,7 @@ class WorkerBee ( QThread ) :
 	    #print('    -- opening '+comic.url)
             # Execute the request by opening it, creating a "file" to the page.
 	    # Use a 3-second timeout to avoid hang-like conditions.
-            furl = urllib2.urlopen(ureq,None,3)
+            furl = urllib2.urlopen(ureq,None,URLTIMEOUT)
 	except urllib2.HTTPError as ugh :
 	    comic.error='URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.msg)
 	    return u''
@@ -1409,10 +1412,15 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
         self.model.save(self.settings)
 
 if __name__ == "__main__":
-    import sys
+    # Set the global default timeout value in a (probably vain) hope
+    # of avoiding hangups on slow-loading web pages
+    import socket
+    if socket.getdefaulttimeout() is None :
+	socket.setdefaulttimeout(GLOBALTIMEOUT)
     # setup the font globals
     setup_jolly_fonts()
     # create an app
+    import sys
     app = QApplication(sys.argv)
     app.setOrganizationName("Tassosoft")
     app.setOrganizationDomain("tassos-oak.com")
