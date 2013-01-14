@@ -510,7 +510,7 @@ class WorkerBee ( QThread ) :
             page = unicode(furl.read(),encoding,'ignore')
         except Exception as ugh:
 	    comic.error='Read of open URL failed: '+str(ugh.args)
-            page = unicode('')
+            page = u''
         finally:
             furl.close()
         return page
@@ -869,6 +869,8 @@ class CobroListView(QListView) :
         super(CobroListView, self).__init__(parent)
         # Save reference to our browser window for use in itemClicked
         self.webview = browser
+	# flag where we prevent a recursion loop on dataChanged signal!
+	self.recursing = False
         # Set all the many properties of a ListView/AbstractItemView in
         # alphabetic order as listed in the QAbstractItemView class ref.
         # alternate the colors of the list, like greenbar paper (nostalgia)
@@ -911,6 +913,7 @@ class CobroListView(QListView) :
     # item URL in our web browser.
     def itemClicked(self, index) :
         global comics, OLDCOMIC, NEWCOMIC, BADCOMIC, StatusRole, LastViewRole
+	self.recursing = True
         comic = comics[index.row()]
 	self.webview.page().triggerAction(QWebPage.Stop)
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
@@ -941,26 +944,28 @@ class CobroListView(QListView) :
 	    <p style='text-align:center;margin-top:8em;'>
 	    I'm working on it, alright? Geez, gimme a sec...</p>'''),
                                   QUrl())
+	self.recursing = False
     
     # Override the dataChanged slot in order to redisplay a web page, in the
     # event that the item being changed is exactly the one item selected, and
     # its status is OLD, NEW or BAD. In that case, use self.itemClicked to 
     # start a redisplay of its html.
     def dataChanged(self, topLeft, bottomRight ) :
-	top_left_row = topLeft.row()
-	if top_left_row == bottomRight.row() :
-	    # just one item being changed
-	    selection = self.selectedIndexes()
-	    if len(selection) == 1 :
-		# just one item is selected
-		sel_item = selection[0]
-		if sel_item.row() == top_left_row :
-		    # that item is the one item currently highlited in the list
-		    # is it in displayable state (or is it "working" or invalid)?
-		    comic = comics[top_left_row]
-		    if comic.status in [NEWCOMIC, BADCOMIC, OLDCOMIC] :
-			# yeah, so update the html display
-			self.itemClicked(sel_item)
+	if not self.recursing: # signal didn't come as a result of itemClicked above
+	    top_left_row = topLeft.row()
+	    if top_left_row == bottomRight.row() :
+		# just one item being changed
+		selection = self.selectedIndexes()
+		if len(selection) == 1 :
+		    # just one item is selected
+		    sel_item = selection[0]
+		    if sel_item.row() == top_left_row :
+			# that item is the one item currently highlited in the list
+			# is it in displayable state (or is it "working" or invalid)?
+			comic = comics[top_left_row]
+			if comic.status in [NEWCOMIC, BADCOMIC, OLDCOMIC] :
+			    # yeah, so update the html display
+			    self.itemClicked(sel_item)
 	# irregardless, pass the signal on to the parent
 	super(CobroListView,self).dataChanged(topLeft, bottomRight)
 	
@@ -1432,3 +1437,5 @@ if __name__ == "__main__":
     main.show()
     app.exec_()
     # c'est tout!
+    
+    
