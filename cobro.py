@@ -59,7 +59,7 @@ The comic names in the list are shown in different fonts to reflect the status,
 normal for seen, bold for new, italic for being-read, and strikeout for error.
 
 When the user clicks on a comic in the list, that comic's contents text
-is loaded into the web page display with QWebView::setHTML() where it is
+is loaded into the web page display with QWebView::setHTML(), where it is
 rendered. The displayed page can be used as in any browser, e.g. the user
 can click on buttons and follow links in the page. Javascript is allowed
 but java is not. Browsing is "private," no cookies or caches are kept.
@@ -75,11 +75,12 @@ There is a single menu, the File menu, with these commands:
         opens a dialog to collect the name, URL and updays of a new comic,
         which is added to the list at the bottom.
   * Refresh
-        Apply refresh to the selected comic if any, or to all comics if
+        Apply refresh to the selected comics if any, or to all comics if
 	no selection. The refresh operation is described below.
   * Delete
         After querying for OK, delete the selected comic (if any).
   * Quit
+        Save the persistent comic values and terminate.
 
 When the app loads, or when File>Refresh is chosen, or when the URL of a
 comic is edited, the app pushes the model index of all, or selected, or the
@@ -169,6 +170,8 @@ import urllib2 # for reading urls, duh
 import re # regular expressions
 import os # getcwd
 import io # stringIO
+# Python 3.3 : from html.parser import HTMLParser
+from HTMLParser import HTMLParser #2
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # some global constants
@@ -245,7 +248,7 @@ def setup_jolly_fonts():
 # string of 7 characters with '-' meaning "no update", except that when
 # the whole string is hyphens it's "don't know" and every day is an upday.
 
-class UpDays() :
+class UpDays(object) :
     dayLetters = 'MTWTFSS' # actual values unimportant as long as not '-'
     empty = '-------'
     def __init__(self, setup = '-------' ) :
@@ -286,7 +289,7 @@ class UpDays() :
 # And we use Python regexes on them when needed, not QRegExps.
 #
 
-class Comic() :
+class Comic(object) :
     def __init__(self, n=u'', s=OLDCOMIC, u=u'', h='', d=u'-------', l=0 ) :
         self.name = n
         self.status = s
@@ -339,6 +342,41 @@ work_queue_lock = QMutex() # lock to allow updating the queue
 worker_working = False # flag to block drag/drop reordering
 
 worker_waits = QWaitCondition() # where the worker thread awaits work
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# This HTML parser class receives an sha1 hasher and shoves the src
+# attribute of any <img statement into it -- except for certain images that
+# are by experience false updates.
+# I need an __init__ so as to store the sha1 hasher and the block list,
+# but using super() to call the
+# parent class's __init__ raises an error for reasons I don't get.
+# So I just call the class method directly, which seems to work.
+
+class myParser(HTMLParser):
+    def __init__(self, sha1) :
+	HTMLParser.__init__(self)
+	self.sha1 = sha1
+	# A list of strings that are present in images that change without 
+	# any relation to new content in the actual comic. Eliminate these from
+	# the hash to prevent false positive detection of new content.
+	#  in A Multiverse, images/goat-xxxx changes randomly
+	#  in comics that use yahoo for analytics, yahoo.com/visit.gif has a random argument
+	#  some comics load different gravatars for no obvious reason
+	#  Savage Chickens injects random ads from its images directory
+	self.blacklist = ['images/goat',
+	                  'webhosting.yahoo',
+	                  'gravatar',
+	                  'savagechickens.com/images']
+    def read_hash(self) :
+	return bytes(self.sha1.digest())
+    def handle_starttag(self, tag, attrs):
+	if tag == 'img' :
+	    for (attr,val) in attrs :
+		if attr == 'src' :
+		    for nono in self.blacklist :
+			if nono in val :
+			    return
+		    #print(val) #dbg: make a record of the hash input
+		    self.sha1.update(val)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # This is the worker thread. Its code is in its run() method. It is
@@ -357,6 +395,8 @@ class WorkerBee ( QThread ) :
         # save the number of the day of the week: UpDay uses 0-6 for Mon-Sun,
         # which is one less than the ISO day of the week numbering.
         self.day_of_week = self.today.isoweekday() - 1
+	# The user-agent value we use to open a URL
+	self.agent_string = 'Mozilla/5.0 (Cobro 1.0) AppleWebKit'
 
     def run(self) :
         global work_queue, work_queue_lock, worker_working, worker_waits
@@ -390,11 +430,8 @@ class WorkerBee ( QThread ) :
     #  - Or, an update-day has passed since we last read it
     # If neither is true, there is no need to update the hash, so
     # signal the main thread to mark it as OLDCOMIC and exit.
-    # Read the page at its URL again. If any error, signal status of BADCOMIC & exit.
-    # Now compute the page hash line by line, using
-    # only those lines that are the same between the two copies. This eliminates
-    # from the hash, those lines that change arbitrarily between fetches.
-    #
+    # Compute a hash based on the content of the newly-read page; see below for
+    # comments on the method used.
     # If the new page hash differs from the old hash, save the new hash and
     # tell the main thread to mark it NEWCOMIC -- else, OLDCOMIC.
 
@@ -404,16 +441,14 @@ class WorkerBee ( QThread ) :
         row = ix.row()
         self.emit(SIGNAL('statusChanged'), row, WORKING)
         comic = comics[row]
-	print(comic.name)
 	# Read the comic page once and save it, no matter status
-	page1 = self.read_url(comic)
-	comic.page = page1
+	page_text = self.read_url(comic)
+	comic.page = page_text
 	# Now, do we test the hash?
-	if 0 == len(page1) :
+	if 0 == len(page_text) :
 	    # some problem reading the comic, mark it bad and quit.
 	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
 	    return
-	#print('  read 1')
         days_since_read = self.ordinal_today - comic.lastread
 	read_it = False # will we or won't we?
         if days_since_read < 7 :
@@ -431,44 +466,38 @@ class WorkerBee ( QThread ) :
             # not an update day and recently tested
             self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
             return
-	# Read it again.
-	page2 = self.read_url(comic)
-	#print('  read 2')
-	if 0 ==len(page2) :
-	    # some problem reading the comic a second time. We did get one good
-	    # read out of it, so we have that string for display. But mark it BADCOMIC
-	    # and don't update the hash or the last-read date.
-	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
-	    return
-	# We have two copies of the page. Read them by lines and where the lines are
-	# the same, stuff them into the hash machine. Thus the hash will be based on
-	# the lines that are constant today, and not be polluted by the arbitrary
-	# "random comic" links or sql query counts or what-not.
+	# OK, this comic might could be new, so create a hash of the page we read
+	# and see if it is different from the prior hash. Initially we just fed the
+	# whole page, e.g. self.hash.update(ppage_text). That gets false positives
+	# since some comics have for example, random-comic links that change on every
+	# read, and comments documenting the number of SQL queries to generate, and
+	# these changed every read. So then we read the page a second time and hashed
+	# only the lines that were the same between two successive reads. That took
+	# extra time and still didn't eliminate all the random updates, for example
+	# user-comment counts vary from hour to hour. So now we are parsing the HTML
+	# and hashing only the src= attributes of <img /> statements. We'll see.
 	comic.lastread = self.ordinal_today # date of the new hash
-        sha1 = self.hash.copy() # make a new, empty hash gizmo
-	# open page1 and page2 as file-like objects
-	fpage1 = io.StringIO(page1)
-	fpage2 = io.StringIO(page2)
-	f1 = fpage1.readline()
-	while len(f1) :
-	    f1 = f1.strip()
-	    f2 = fpage2.readline().strip()
-	    if f1 == f2 :
-		sha1.update(f1.encode(u'ISO-8859-1','xmlcharrefreplace'))
-	    else :
-		print('    f1: '+f1)
-		print('    f2: '+f2)
-	    f1 = fpage1.readline()
-        new_hash = bytes(sha1.digest()) # save the resulting hash signature
+	#print('checking',comic.name)
+	parsnip = myParser(self.hash.copy())
+	page_as_file = io.StringIO(page_text)
+	line = page_as_file.readline()
+	while 0 < len(line):
+	    try:
+		parsnip.feed(line)
+	    except Exception as wtf :
+		# Some comics have javascript literals that HTMLParser chokes on.
+		# It throws an exception. Just ignore it.
+		parsnip.reset()
+	    line = page_as_file.readline()
+	# The html parser has pushed all the img urls into the hasher.
+	new_hash = parsnip.read_hash() # save the resulting hash signature
         if comic.sha1 != new_hash :
             # The comic's web page has changed since it was seen.
             comic.sha1 = new_hash
             self.emit(SIGNAL('statusChanged'), row, NEWCOMIC)
-	    print('  new')
         else :
             # it has not changed.
             self.emit(SIGNAL('statusChanged'), row, OLDCOMIC)
-	    print('  old')
         return
 
     # Given a comic, read the single html page at its url and return the page as
@@ -485,7 +514,7 @@ class WorkerBee ( QThread ) :
             ureq = urllib2.Request(comic.url)
 	    # The commercial (comics.com) sites won't respond without a proper agent
 	    # Popsickle Strip gives a 406 error unless the renderer is included
-            ureq.add_header('User-agent', 'Mozilla/5.0 AppleWebKit')
+            ureq.add_header('User-agent', self.agent_string)
 	    # Blog-based sites reject us with 403 unless we have this:
 	    ureq.add_header('Accept', 'text/html')	    
 	    #print('    -- opening '+comic.url)
@@ -709,7 +738,7 @@ class ConcreteListModel ( QAbstractListModel ) :
 
     def removeRows(self, row, count, parent) :
         global comics, worker_working
-        print('removeRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
+        #print('removeRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
         if worker_working :
             return False
         self.beginRemoveRows(parent, row, row+count-1)
@@ -735,7 +764,7 @@ class ConcreteListModel ( QAbstractListModel ) :
             DaysRole : str(comic.updays),
             LastReadRole : comic.lastread
         }
-        print('itemData row {0}'.format(index.row()))
+        #print('itemData row {0}'.format(index.row()))
         return item_dict
 
     # Here we receive the data prepared by itemData() above. However by the
@@ -748,8 +777,8 @@ class ConcreteListModel ( QAbstractListModel ) :
     # know that data has been changed and needs to be redisplayed.
     def setItemData(self, index, qdict) :
         global comics, UpDays
-        print('setItemData row {0}'.format(index.row()))
-        dbg = index.row()
+        #print('setItemData row {0}'.format(index.row()))
+        #dbg = index.row()
         comic = comics[index.row()]
         comic.name = unicode( qdict[Qt.DisplayRole].toString() )
         (comic.status, ok) = qdict[StatusRole].toInt()
@@ -983,28 +1012,33 @@ WelcomeScreen = QString(u'''
 No comics in the list? Start by adding these:</p>
 <table style='border-collapse:collapse; width:80%;margin:auto;'>
 <tr><td>Comic name</td><td>Comic URL</td><td>Updates</td></tr>
-<tr><td>XKCD</td><td>http://xkcd.com/</td><td>unpredictable, leave blank</td></tr>
+<tr><td>XKCD</td><td>http://xkcd.com/</td><td>M-W-F</td></tr>
 <tr><td>Bug Comic</td><td>http://www.bugcomic.com</td><td>weekdays</td></tr>
+<tr><td>PhD Comics</td><td>http://www.phdcomics.com/comics.php</td><td>Unpredictable, leave blank</td></tr>
 <tr><td>Megacynics</td><td>http://www.megacynics.com/</td><td>M-W-F</td></tr>
 <tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td><td>Sunday only</td></tr>
 </table>
 <p>That's enough! Find all the nationally-syndicated (newspaper) cartoons at
-<a href='http://comics.com/'>Comics.com</a>. Then just
-put "best web comics" in a search engine and explore! There are thousands!</p>
+<a href='http://comics.com/'>Comics.com</a>. Then just explore!
+There are thousands of web comics, and every one has links to others that
+the artist likes!</p>
 <p>Change the list order by dragging and dropping.</p>
 <p>Double-click a comic to edit	its name, URL, or publication days.</p>
 <p>To "refresh" a comic means to read its web page and see if it is
 different from the last time.</p><ul><li>
 While it is being read its name is <i>italic</i>.</li>
 <li>After reading, if we think it is different from the last time,
-its name turns <b>bold</b>.</li>
+its name turns <b>bold</b>. (This is sometimes trigged by a change of
+ad copy or new comments, too.)</li>
 <li>If there is a problem reading it, its name is <strike>lined-out</strike>.</li>
 </ul>
-<p>All comics are refreshed at startup. Use File&gt;Refresh to refresh a new or edited comic.</p>
+<p>All comics are refreshed at startup. Use File&gt;Refresh to
+refresh a new or edited comic.</p>
 <p>While browsing, use ctl-[ for "back" and ctl-] for "forward"
 (cmd-[ and cmd-] on a mac).</p>
-<p>Comic definitions are saved in some magic settings place depending your OS 
-(Registry, Library/Preferences, ~/.config)</p>
+<p>When you quit the app, it saves the
+comic definitions in some magic settings place, depending your OS 
+(Registry, Library/Preferences, ~/.config).</p>
 <p>Use File&gt;Export to write definitions of the selected comics to a text file.</p>
 <p>Use File&gt;Import to read definitions from a text file and add them to the list
 (or to replace them, when the name's the same).</p>
