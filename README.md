@@ -117,6 +117,21 @@ The font style of each item indicates its status:
 
 * Strikethrough: an error occurred reading this comic
 
+Display Operation
+-----------------
+
+When the user clicks on a comic name,
+the text of its page is passed
+to the QWebView for rendering.
+This may take time if the page links numerous ads and images.
+A progress bar keeps the user informed.
+
+QWebview is configured to disable java
+but to permit javascript and plug-ins, because
+some comics require Flash.
+
+After displaying a new comic, its status is set to not-new
+and normal font.
 
 Refresh Operation
 -----------------
@@ -136,22 +151,6 @@ The app goes through the (selected) items one at a time and for each it:
 * Else sets normal font (no new comic)
 
 * Stores the text of the web page in memory.
-
-Display Operation
------------------
-
-When the user clicks on a comic name,
-the text of its page is passed
-to the QWebView for rendering.
-This may take time if the page links numerous ads and images.
-A progress bar keeps the user informed.
-
-QWebview is configured to disable java
-but to permit javascript and plug-ins, because
-some comics require Flash.
-
-After displaying a new comic, its status is set to not-new
-and normal font.
 
 Shutdown Operation
 ------------------
