@@ -1,6 +1,11 @@
 COBRO: A Comics Browser
 =======================
 
+CoBro is a very simple web browser designed to store and display
+a list of web comics. It shows the user which comics have been
+updated since they were last viewed. In general its aim is to make
+it quick and simple to enjoy one's daily comics.
+
 The Inspiration: Comictastic
 ----------------------------
 
@@ -52,7 +57,7 @@ a good way to read comics. It is very convenient that Comictastic:
 
 * Starts pre-loading comics as soon as the program launches;
 
-* Displays comic's names in bold when there is an unread episode;
+* Displays comic names in bold when there is an unread episode;
 
 These conveniences are not available reading the same comics in
 Chrome or Firefox. I'd have to use the browser's
@@ -152,6 +157,5 @@ Shutdown Operation
 ------------------
 
 On shutdown,
-store the each comic: name, URL, and last hash value -- in the app settings.
-Also the window geometry.
-
+store the name, URL, and last hash value or each comic in the app settings.
+(Location of settings depends on the OS.)
