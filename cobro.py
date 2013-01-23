@@ -8,7 +8,7 @@ from future_builtins import *
 __version__ = "1.00.0"
 __author__  = "David Cortesi"
 __copyright__ = "Copyright 2012, 2013 David Cortesi"
-__maintainer__ = "?"
+__maintainer__ = "who indeed"
 __email__ = "tallforasmurf@yahoo.com"
 __status__ = "first-draft"
 __license__ = '''
@@ -28,7 +28,7 @@ __license__ = '''
     You can find a copy of the GNU General Public License at:
     <http://www.gnu.org/licenses/>.
 '''
-
+# le doc-string
 '''
 CoBro (Comic Browser) is a minimal web browser designed for
 convenient reading of Web Comics. The main window has a list
@@ -39,12 +39,11 @@ Associated with each comic in the list are these persistent items:
   * the user-provided URL of the comic
   * the date the comic was last read
   * the days of the week it may be updated
-  * the SHA-1 hash of the contents of the page at the URL last time it was read
+  * an SHA-1 hash based on the contents of the page at the URL when it was last read
 These items are saved at shutdown and reloaded at startup.
 
 Also associated with each comic but created dynamically as the program runs:
   * the contents of the page at the comic URL
-  * the date last read
   * a status, one of:
      - comic has been seen
      - comic has not been seen since it was read
@@ -66,7 +65,7 @@ but java is not. Browsing is "private," no cookies or caches are kept.
 
 The list supports the following operations:
   * single-click an item to select and display that comic in the web display
-  * drag and drop a selected item to reorder the list
+  * drag and drop selected items to reorder the list
   * double-click an item to open an Edit Comic dialog which permits
         editing the name, URL, and updays.
 
@@ -90,8 +89,8 @@ on the semaphore. While there is work on the queue it
 * pops the next model index qmi from the queue and:
 * signals statusChanged(qmi, WORKING)
 * initiates a page-load from the item's URL
-* if the load ends it error it signals statusChanged(qmi, BADCOMIC)
-* else it computes the hash of the loaded page.
+* if the load ends in error it signals statusChanged(qmi, BADCOMIC)
+* else it computes the hash based on the loaded page.
 * if the hash is the same as before, it signals statusChanged(qmi, OLDCOMIC)
 * else it updates the model with the new page data and new hash and
    signals statusChanged(qmi, NEWCOMIC)
@@ -395,7 +394,9 @@ class WorkerBee ( QThread ) :
         # save the number of the day of the week: UpDay uses 0-6 for Mon-Sun,
         # which is one less than the ISO day of the week numbering.
         self.day_of_week = self.today.isoweekday() - 1
-	# The user-agent value we use to open a URL
+	# The user-agent value we use to open a URL.
+	# Commercial (comics.com) sites won't respond without a proper agent.
+	# Popsickle Strip gives a 406 error unless the renderer is included.
 	self.agent_string = 'Mozilla/5.0 (Cobro 1.0) AppleWebKit'
 
     def run(self) :
@@ -424,8 +425,8 @@ class WorkerBee ( QThread ) :
 
     # Process one Comic: Signal the main thread to update status to WORKING.
     # We will read the comic page no matter its status, because the user might
-    # want to view even an old comic. But check its hash against the last-read hash,
-    # which is an expensive process, if:
+    # want to view even an old comic. But we check its hash against the last-read
+    # hash, which is an expensive process, only if:
     #  - Today is an update-day for this comic
     #  - Or, an update-day has passed since we last read it
     # If neither is true, there is no need to update the hash, so
@@ -444,11 +445,11 @@ class WorkerBee ( QThread ) :
 	# Read the comic page once and save it, no matter status
 	page_text = self.read_url(comic)
 	comic.page = page_text
-	# Now, do we test the hash?
 	if 0 == len(page_text) :
 	    # some problem reading the comic, mark it bad and quit.
 	    self.emit(SIGNAL('statusChanged'), row, BADCOMIC)
 	    return
+	# Now, do we test the hash?
         days_since_read = self.ordinal_today - comic.lastread
 	read_it = False # will we or won't we?
         if days_since_read < 7 :
@@ -468,14 +469,16 @@ class WorkerBee ( QThread ) :
             return
 	# OK, this comic might could be new, so create a hash of the page we read
 	# and see if it is different from the prior hash. Initially we just fed the
-	# whole page, e.g. self.hash.update(ppage_text). That gets false positives
+	# whole page, e.g. self.hash.update(page_text). That gets false positives
 	# since some comics have for example, random-comic links that change on every
 	# read, and comments documenting the number of SQL queries to generate, and
-	# these changed every read. So then we read the page a second time and hashed
+	# these changed every read. Next we read the page a second time and hashed
 	# only the lines that were the same between two successive reads. That took
 	# extra time and still didn't eliminate all the random updates, for example
 	# user-comment counts vary from hour to hour. So now we are parsing the HTML
-	# and hashing only the src= attributes of <img /> statements. We'll see.
+	# and hashing only the src= attributes of <img /> statements. This seems
+	# to work pretty well but see myParser class above for how we blacklist
+	# certain img statements that also vary randomly.
 	comic.lastread = self.ordinal_today # date of the new hash
 	#print('checking',comic.name)
 	parsnip = myParser(self.hash.copy())
@@ -512,14 +515,12 @@ class WorkerBee ( QThread ) :
         try:
             # Create an http "request" object for the URL
             ureq = urllib2.Request(comic.url)
-	    # The commercial (comics.com) sites won't respond without a proper agent
-	    # Popsickle Strip gives a 406 error unless the renderer is included
             ureq.add_header('User-agent', self.agent_string)
 	    # Blog-based sites reject us with 403 unless we have this:
 	    ureq.add_header('Accept', 'text/html')	    
 	    #print('    -- opening '+comic.url)
             # Execute the request by opening it, creating a "file" to the page.
-	    # Use a 3-second timeout to avoid hang-like conditions.
+	    # Use a timeout to avoid hang-like conditions on slow sites.
             furl = urllib2.urlopen(ureq,None,URLTIMEOUT)
 	except urllib2.HTTPError as ugh :
 	    comic.error='URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.msg)
@@ -1018,10 +1019,11 @@ No comics in the list? Start by adding these:</p>
 <tr><td>Megacynics</td><td>http://www.megacynics.com/</td><td>M-W-F</td></tr>
 <tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td><td>Sunday only</td></tr>
 </table>
-<p>That's enough! Find all the nationally-syndicated (newspaper) cartoons at
-<a href='http://comics.com/'>Comics.com</a>. Then just explore!
-There are thousands of web comics, and every one has links to others that
-the artist likes!</p>
+<p>That's enough! There are thousands of web comics,
+and every one has links to others that
+the artist likes! Look for nationally-syndicated (newspaper) cartoons at
+<a href='http://comics.com/'>Comics.com</a>, or check the website of your
+regional newspaper under "Entertainment". Then just explore!</p>
 <p>Change the list order by dragging and dropping.</p>
 <p>Double-click a comic to edit	its name, URL, or publication days.</p>
 <p>To "refresh" a comic means to read its web page and see if it is
@@ -1101,6 +1103,7 @@ class CobroWebPage(QWebView) :
 	                 Qt.ControlModifier | Qt.Key_BracketLeft]
 	self.forwardKeys = [Qt.ControlModifier | Qt.Key_Right,
 	                    Qt.ControlModifier | Qt.Key_BracketRight]
+	self.copyKeys = [Qt.ControlModifier | Qt.Key_C, Qt.Key_Copy ]
         # Load a greeting message
         self.setHtml(WelcomeScreen)
     # Slot to receive the loadStarted signal: clear the bar to zero and show
@@ -1129,8 +1132,11 @@ class CobroWebPage(QWebView) :
         if not ok : 
             self.statusLine.setText(u"Some error")
 
-    # Re-implement the parent's keyPressEvent in order to provide
-    # font-size-zoom from ctl-plus/minus, and browser back/forward.
+    # Re-implement the parent's keyPressEvent in order to provide:
+    # * font-size-zoom from ctl-plus/ctl-minus,
+    # * browser back on ctl-[, ctl-b, ctl-left
+    # * browser forward on ctl-], ctl-right
+    # * copy selected to clipboard on ctl-c
     # For the font size, we initialize the view at 16 points and
     # the textSizeMultiplier at 1.0. Each time the user hits ctl-minus
     # we deduct 0.0625 from the multiplier, and for each ctl-+ we add 0.0625
@@ -1158,6 +1164,9 @@ class CobroWebPage(QWebView) :
 	    event.accept()
 	    if self.page().history().canGoForward() :
 		self.page().history().forward()
+	elif (kkey in self.copyKeys) :
+	    event.accept()
+	    QApplication.clipboard().setText(self.selectedText())
 	else: # not a key we support, so,
 	    event.ignore()
 	super(CobroWebPage, self).keyPressEvent(event)
