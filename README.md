@@ -6,6 +6,13 @@ a list of web comics. It shows the user which comics have been
 updated since they were last viewed. In general its aim is to make
 it quick and simple to enjoy one's daily comics.
 
+CoBro source can be viewed here: https://github.com/tallforasmurf/CoBro
+That location also has a couple of lists of comics that CoBro can import.
+
+Binary executables for Windows and Mac OS can be downloaded at
+https://www.dropbox.com/sh/ovgn8muzrn5nsku/0x0KUtOPxo/CoBro
+The md5 signatures are shown in that folder.
+
 The Inspiration: Comictastic
 ----------------------------
 
