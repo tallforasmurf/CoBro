@@ -38,7 +38,7 @@ A Specialty Browser
 
 However, a general-purpose browser is not
 a good way to read comics. It is very convenient that Comictastic
-(1) resents a scrolling list of names;
+(1) presents a scrolling list of names;
 (2) Starts pre-loading comics as soon as the program launches;
 and (c) Displays comic names in bold to show an unread episode.
 
@@ -137,6 +137,9 @@ The app goes through the (selected) items one at a time and for each it:
 * Else sets normal font (no new comic)
 
 * Stores the text of the web page in memory.
+
+The refresh operation is done in a separate QThread so the user
+can display and read comics while others are being updated.
 
 Shutdown Operation
 ------------------
