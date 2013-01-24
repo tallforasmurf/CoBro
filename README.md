@@ -12,57 +12,43 @@ The Inspiration: Comictastic
 For years I've used the little app Comictastic 
 (see http://spiny.com/comictastic/) to read
 a couple dozen web comics daily. However, it has
-several drawbacks:
+drawbacks: it is difficult and sometimes
+impossible to configure new comics, and
+it is no longer supported and isn't open-source
+so it can't be forked and tinkered-with.
 
-* It is no longer supported and isn't open-source so it can't be forked;
-
-* It is difficult to configure new comics;
-
-* Sometimes it is impossible to make a comic work;
-
-* It is a web scraper, it fetches only the image of the comic and nothing else.
-
-The last point is the most important. It creates drawbacks for
-both the user and for the authors of the comics.
-
+But mainly, Comictastic is a web scraper:
+it fetches only the image of the comic and nothing else.
+That creates drawbacks for
+both the user and for the artists.
+The comic author loses out on visitor counts and on ad revenue.
 The user loses out on features 
-provided by the full HTML page of the typical comic,
-for example:
+provided by the full HTML page,
+like the Red Button at SMBC, the
+title text that pops up when hovering the XKCD image,
+the previous/next/first/random nav buttons on most comics,
+or links to a comic's About or Cast page.
 
-* the Red Button on every SMBC comic;
-
-* the title that pops up when hovering the XKCD image;
-
-* the previous/next/first/random navigation buttons on most comics;
-
-* easy linking to the comic's back-story or character lists.
-
-The comic authors lose out because a source download
-by Comictastic isn't a "visit" in web terms, so they
-lose out on visitor counts and on ad revenue.
-
-I thought a long time about making a better version
-of Comictastic, but finally concluded
-that the right way to read web comics is to use a browser
-to render the whole page. All the user has to configure
-is the comic's URL. Then just get the html and render the page.
+I thought a long time about writing a better Comictastic,
+but concluded that the right way to read web comics is to use a browser
+to render the whole page.
 
 A Specialty Browser
 -------------------
 
 However, a general-purpose browser is not
-a good way to read comics. It is very convenient that Comictastic:
+a good way to read comics. It is very convenient that Comictastic
+(1) resents a scrolling list of names;
+(2) Starts pre-loading comics as soon as the program launches;
+and (c) Displays comic names in bold to show an unread episode.
 
-* Presents a scrolling list of names;
-
-* Starts pre-loading comics as soon as the program launches;
-
-* Displays comic names in bold when there is an unread episode;
-
-These conveniences are not available reading the same comics in
-Chrome or Firefox. I'd have to use the browser's
+In Chrome or Firefox, I'd have to use the browser's
 bookmark manager, and reading through a list of comics would entail
-many more clicks and some delay because they aren't preloaded.
+many more clicks, and I'd have to look at many previously-read
+ones because new ones aren't flagged. Or, I could use an RSS reader
+like Google Reader (which I do use for blogs), but not all comics
+have RSS feeds, and there are more clicks involved in getting at the 
+content.
 
 So: I want a small, simple web browser specially designed for
 reading web comics, with full HTML support but with the convenience 
