@@ -137,6 +137,7 @@ from PyQt4.QtGui import (
     QApplication,
     QAbstractItemView,
     QCheckBox,
+    QClipboard,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -1009,14 +1010,19 @@ WelcomeScreen = QString(u'''
 <h2>Welcome to CoBro!</h2>
 </div>
 <p>Single-click a comic name to display its page in this browser.</p>
-<p>Use File&gt;New Comic to add a comic to the list by name and URL.
-No comics in the list? Start by adding these:</p>
+<p>No comics in the list? Use File&gt;New Comic
+to add a comic by name and URL.
+Start by adding some of these nerd favorites!
+Drag to select one these URLs;
+key ctl-c (mac: cmd-c) to copy;
+select File&gt;New Comic and fill in the name and update days.</p>
 <table style='border-collapse:collapse; width:80%;margin:auto;'>
 <tr><td>Comic name</td><td>Comic URL</td><td>Updates</td></tr>
 <tr><td>XKCD</td><td>http://xkcd.com/</td><td>M-W-F</td></tr>
 <tr><td>Bug Comic</td><td>http://www.bugcomic.com</td><td>weekdays</td></tr>
 <tr><td>PhD Comics</td><td>http://www.phdcomics.com/comics.php</td><td>Unpredictable, leave blank</td></tr>
 <tr><td>Megacynics</td><td>http://www.megacynics.com/</td><td>M-W-F</td></tr>
+<tr><td>Penny Arcade</td><td>http://www.penny-arcade.com/comic</td><td>weekdays</td></tr>
 <tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td><td>Sunday only</td></tr>
 </table>
 <p>That's enough! There are thousands of web comics,
@@ -1043,7 +1049,8 @@ comic definitions in some magic settings place, depending your OS
 (Registry, Library/Preferences, ~/.config).</p>
 <p>Use File&gt;Export to write definitions of the selected comics to a text file.</p>
 <p>Use File&gt;Import to read definitions from a text file and add them to the list
-(or to replace them, when the name's the same).</p>
+(or to replace them, when the name's the same). For the import file format,
+export one comic and look at that output.</p>
 <p>That's it! Enjoy!</p>
 <hr /><p>License (GPL-3.0):
 CoBro is free software: you can redistribute it and/or modify
@@ -1294,27 +1301,48 @@ class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
     # We can't start if a refresh is in progress, because insertRows won't work.
     # But if the worker thread is quiescent, create a custom dialog based on
     # the same edit widget as used by the custom delegate, but augmented with
-    # OK and Cancel buttons. Display it. If the dialog is accepted, call the
-    # model's insertRows method to add a row at the end, then load that empty
-    # Comic from the dialog values. We can do this while the refresh thread
-    # is running.
+    # OK and Cancel buttons. If the app. clipboard contains text that looks like
+    # a URL, use it to initialize the dialog. Display the dialog.
+    # If the dialog is accepted, call the model's insertRows method to add a
+    # row at the end, then load that empty Comic from the dialog values.
 
     def newComic(self) :
 	global worker_working
 	if worker_working :
 	    warningMsg(u'Sorry, Update in progress','Please wait until all refreshes are done')
 	    return
-        dlg = QDialog(self, Qt.Dialog)
+	# Create the input dialog widget from the same class as used for the
+	# custom item delegate.
         edw = EditWidget()
+	# Get the global clipboard text as a python string.
+	qs_clip = QApplication.clipboard().text()
+	clip = unicode(qs_clip)
+	if len(clip) :
+	    # There is some text on the clipboard, does it look like a URL?
+	    if re.match(u'http://',clip,re.I) :
+		# oh yeah. Stuff that puppy into the dialog's URL slot
+		edw.urlEdit.setText(qs_clip)
+		# also try to pick out the domain and put it in the name field
+		domain_match = re.search(u'://(www\.)?([^\.]+)\.',clip,re.I)
+		if domain_match :
+		    edw.nameEdit.setText(QString(domain_match.group(2)))
+	# Set up a pair of OK/Cancel buttons	    
         bts = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+	# Stack the edit widget over the button row
         vb = QVBoxLayout()
         vb.addWidget(edw)
         vb.addWidget(bts)
+	# Create a dialog and lay it out with the above items. Connect the OK/Cancel
+	# buttons' signals to the dialog's accept/reject slots. Blahdiblahdiblah gui.
+	dlg = QDialog(self, Qt.Dialog)
         dlg.setLayout(vb)
         self.connect(bts, SIGNAL('accepted()'), dlg, SLOT('accept()'))
         self.connect(bts, SIGNAL('rejected()'), dlg, SLOT('reject()'))
+	# Show that dialog and await wonderfulness.
         ans = dlg.exec_()
         if ans == QDialog.Accepted :
+	    # User is happy. Note we do NOT check for a duplicate comic name,
+	    # if you want three comics named FOOBAR, be my guest.
             j = self.model.rowCount(QModelIndex()) # count of rows now
             self.model.insertRows(j,1,QModelIndex())
 	    ix = self.model.createIndex(j,0) # create model index of new row
