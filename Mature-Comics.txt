@@ -10,8 +10,8 @@
 # and separated by spaces and/or commas. All lines that don't match are ignored
 # and can be used as commentary, like these lines.
 
-* The following comics, although they are the funniest things on the internet,
-* are frequently explicit about adult subjects and language.
+* The following comics, although they are some of the funniest things on
+* the internet, are frequently explicit about adult subjects and language.
 
 'A Multiverse', 'http://amultiverse.com/', 'MTWTF--'
 'ChuckleADuck', 'http://chuckleaduck.com/', '-------'
@@ -32,9 +32,6 @@
 'The Strip', 'http://www.nytimes.com/thestrip', '------S'
 'Buttersafe', 'http://buttersafe.com', '-T-T---'
 'Hark! A Vagrant!', 'http://www.harkavagrant.com/index.php', '-------'
-'Robbie and Bobbie', 'http://robbieandbobby.com/', 'M------'
-'WUMO', 'http://wumocomicstrip.com/', 'MTWTF--'
-'Wondermark', 'http://wondermark.com/', '-T--F--'
 'Johny Wander', 'http://www.johnnywander.com', '-T----S'
 'Collected Curios (multicomic)', 'http://www.collectedcurios.com/', '-------'
 'Extra Ordinary', 'http://www.exocomics.com', '-------'
@@ -42,9 +39,8 @@
 'Squid Row', 'http://squidrowcomics.com', 'MTWTFSS'
 'Two Guys and a Guy', 'http://www.twogag.com', 'M-W-F--'
 'Dork Toes', 'http://dorktoescomic.com/', '-T-----'
-
 # note apostrophe in "Fredo and Pid'Jin" is a big no-no!!!
 'Fredo and Pidjin', 'http://www.pidjin.net/', '--W----'
 'Girls with Slingshots', 'http://www.girlswithslingshots.com/', 'MTWTF--'
-'Ctrl-Alt-Del', 'http://www.cad-comic.com/', 'M-W-F--'
+'Ctrl-Alt-Del', 'http://www.cad-comic.com/cad/', 'M-W-F--'
 'Girls w/ Slingshots', 'http://www.girlswithslingshots.com/', 'MTWTF--'
