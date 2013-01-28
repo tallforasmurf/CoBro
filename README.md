@@ -11,7 +11,10 @@ That location also has a couple of lists of comics that CoBro can import.
 
 Binary executables for Windows and Mac OS can be downloaded at
 https://www.dropbox.com/sh/ovgn8muzrn5nsku/0x0KUtOPxo/CoBro
-The md5 signatures are shown in that folder.
+In case you got these from some other source, the md5 signatures are:
+
+    cobro-mac.zip = 32381b38b58074a8d85f0d843990fe9f
+    cobro-win.zip = 409dc800545ee194c149b6e06192fefd
 
 The Inspiration: Comictastic
 ----------------------------
@@ -19,138 +22,181 @@ The Inspiration: Comictastic
 For years I've used the little app Comictastic 
 (see http://spiny.com/comictastic/) to read
 a couple dozen web comics daily. However, it has
-drawbacks: it is difficult and sometimes
-impossible to configure new comics, and
+drawbacks: it is difficult to configure new comics, and
 it is no longer supported and isn't open-source
 so it can't be forked and tinkered-with.
 
-But mainly, Comictastic is a web scraper:
-it fetches only the image of the comic and nothing else.
-That creates drawbacks for
-both the user and for the artists.
-The comic author loses out on visitor counts and on ad revenue.
-The user loses out on features 
-provided by the full HTML page,
-like the Red Button at SMBC, the
-title text that pops up when hovering the XKCD image,
-the previous/next/first/random nav buttons on most comics,
+Most important, Comictastic is a web scraper:
+it fetches only the image of the comic and doesn't render
+any more of the comic's web page.
+That's a drawback for the user and for the artists.
+The comic artist loses out on visitor counts and on ad revenue.
+The user loses out on HTML features
+like the Red Button at SMBC,
+or the title text that pops up when hovering the XKCD image,
+or the previous/next/first nav links,
 or links to a comic's About or Cast page.
-
-I thought a long time about writing a better Comictastic,
-but concluded that the right way to read web comics is to use a browser
-to render the whole page.
 
 A Specialty Browser
 -------------------
 
+I thought a long time about writing a better comic scraper,
+but concluded that the right way to read web comics is to use a browser
+to render the whole page.
+
 However, a general-purpose browser is not
-a good way to read comics. It is very convenient that Comictastic
-(1) presents a scrolling list of names;
-(2) Starts pre-loading comics as soon as the program launches;
-and (c) Displays comic names in bold to show an unread episode.
+a good way to read comics because it lacks the three
+best features of Comictastic:
 
-In Chrome or Firefox, I'd have to use the browser's
-bookmark manager, and reading through a list of comics would entail
-many more clicks, and I'd have to look at many previously-read
-ones because new ones aren't flagged. Or, I could use an RSS reader
-like Google Reader (which I do use for blogs), but not all comics
-have RSS feeds, and there are more clicks involved in getting at the 
-content.
+* A scrolling list of names that can be clicked to show a comic instantly;
 
-So: I want a small, simple web browser specially designed for
-reading web comics, with full HTML support but with the convenience 
-of Comictastic. Qt/PyQt gives me the materials to build this.
+* It starts pre-loading comics as soon as the program launches;
+
+* It displays comic names in bold to show an unread episode.
+
+Also I don't want to mix 20+ comic bookmarks with all my
+other browser bookmarks. An RSS reader
+like Google Reader comes closer, but not all comics
+have RSS feeds, and it is possible to read with even fewer
+clicks in a special-purpose app.
+
+So: A very simple web browser designed just for
+reading web comics. Qt via PyQt gives me the materials to build this.
 
 THE SPEC
 ========
 
-CoBro (Comics Browser -- bro!) is a simple app written in Python (2.7,
-but as soon as pyinstaller supports it I'll make it Python 3.3), using
+CoBro (Comics Browser) is a simple app written in Python (2.6 or 2.7;
+will move to 3.3 as soon as pyinstaller supports it), using
 PyQt4 and Qt4 (Qt5 TBS).
 
-CoBro has a simple window with a scrolling list of names on the left
-and a large QWebView widget on the right.
-The window geometry is recorded at shutdown
-using the QSettings facility, and restored at start-up.
-
-All controls are in the File menu:
-
-* New Comic opens a dialog to name a comic URL and add it to the list.
-
-* Refresh (re)loads the source of the comic(s) selected in the list.
-
-* Delete deletes the selected comic(s) after querying the user.
-
-* Quit stores the list of comics and the window geometry in settings and terminates
+CoBro provides a single window containing
+a scrolling list of comic names on the left
+and a large QWebView (browser) pane on the right.
 
 The List
 --------
 
-The list is a list of comic names, e.g.
-"SMBC", "Jesus and Mo", "Questionable Content" etc.
+The list of names supports multi-selection (shift-click, ctl-click)
+and can be
+reordered by dragging.
+The font style of each name indicates that comic's status:
+
+* Normal: comic available but it contents are unchanged from
+the last time it was read.
+
+* Bold: comic is available with contents that appear to be updated
+since the last time.
+
+* Italic: working: CoBro is trying to read this comic's page now.
+
+* Strikethrough: an error occurred reading this comic.
+
+Double-clicking a name opens a dialog to edit the name, URL,
+and update schedule.
+
+The Browser
+-----------
+
+The browser pane is a QWebView widget, a fully functional
+browser based on WebKit.
+The QWebview is configured to disable java
+but to permit javascript and plug-ins, because
+some comics require Flash.
+The following keystrokes are implemented:
+
+* Browser "back" on ctl/cmd-left, ctl/cmd-b, ctl/cmd-[
+
+* Browser "forward" on ctl/cmd-right, ctl/cmd-]
+
+* Font size zoom on ctl/cmd-plus, ctl/cmd-minus
+
+* Copy selected text to clipboard on ctl/cmd-c
+
+
+File Menu
+---------
+
+The only other controls are in the File menu:
+
+* New Comic opens a dialog to define a comic by name, URL, and
+update schedule, adding it to the list.
+
+* Refresh (re)loads the source of the comic(s) currently
+selected in the list.
+
+* Delete deletes the selected comic(s) after getting an ok from the user.
+
+* Export writes the selected comic(s) to a CSV text file,
+including boilerplate text documenting the file format.
+
+* Import reads a CSV file in the Export format and adds or
+replaces the comics in the list.
+
+* Quit (in Windows, clicking the dismiss button)
+saves the list of comics and terminates.
+
+Stored Data
+-----------
 
 With each name is associated these data:
+* the comic's URL, e.g. "http://www.gocomics.com/stonesoup"
 
-* a URL of a web comic, e.g. "http://www.gocomics.com/stonesoup"
+* the days of the week when it is scheduled to update (if known)
 
 * an SHA-1 hash based on the last-read page of this comic
 
-* the status of the comic: New, Old (previously-read),
+* the status of the comic: New, Old,
 Bad (error reading URL) or Working (read in progress)
 
-* the text contents last read from the comic web page
+* after a refresh, the HTML contents read from the URL
 
-The font style of each item indicates its status:
-
-* Normal: comic available but unchanged from last look
-
-* Bold: a new comic is available
-
-* Italic: working: CoBro is trying to read this comic's page now
-
-* Strikethrough: an error occurred reading this comic
-
-Display Operation
------------------
-
-When the user clicks on a comic name,
-the text of its page is passed
+When the user clicks on a comic name in the list,
+the contents read from its URL are passed
 to the QWebView for rendering.
-This may take time if the page links numerous ads and images.
-A progress bar keeps the user informed.
+This may take time if the page links numerous ads and images,
+so a progress bar is displayed.
 
-QWebview is configured to disable java
-but to permit javascript and plug-ins, because
-some comics require Flash.
-
-After displaying a new comic, its status is set to not-new
-and normal font.
 
 Refresh Operation
 -----------------
 
 When the app starts up it refreshes all comics automatically.
-This and File>Refresh operate the same:
-The app goes through the (selected) items one at a time and for each it:
+This and File>Refresh are the same:
+The app passes the (selected) items to a separate QThread.
+The thread processes comics one at a time and for each:
 
-* Sets italic font on the name and attempts to read the source of the one page at the associated URL.
+* Sets Working status (italic font on the name)
+and attempts to read the
+source of the one page at the associated URL.
 
-* If this times out or yields an error, sets error status and strikethrough font
+* If this times out or yields an error,
+sets error status (strikout font) and returns.
 
-* Else computes the hash of the just-read page and compares to the stored hash.
+* Computes a hash based on selected elements of 
+the page and compares to the prior hash.
 
-* If the hash is different, sets new comic status and bold font.
+* If the hash is different, sets New status (bold font),
+else Old status (normal font).
 
-* Else sets normal font (no new comic)
+* Saves the text of the web page in memory.
 
-* Stores the text of the web page in memory.
-
-The refresh operation is done in a separate QThread so the user
-can display and read comics while others are being updated.
+Because refresh is in a separate thread, the user
+can display and read comics while others are being refreshed.
+The user can begin reading comics as soon as the first comic 
+in the list has changed from Working (italic) font.
 
 Shutdown Operation
 ------------------
 
-On shutdown,
-store the name, URL, and last hash value or each comic in the app settings.
-(Location of settings depends on the OS.)
+On shutdown, Cobro stores the current window geometry, and
+the name, URL, update days, and last hash value or each comic,
+in the app settings.
+Location of settings depends on the OS:
+
+* Windows: Registry under Tassosoft/Cobro
+
+* Mac OSX: ~/Library/Preferences/tassos-oak.com/Cobro.plist
+
+* Linux: $HOME/.config/Tassosoft/Cobro.conf
+
