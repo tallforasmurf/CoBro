@@ -164,22 +164,28 @@ Refresh Operation
 When the app starts up it refreshes all comics automatically.
 This and File>Refresh are the same:
 The app passes the (selected) items to a separate QThread.
-The thread processes comics one at a time and for each:
+The thread processes comics one at a time:
 
-* Sets Working status (italic font on the name)
-and attempts to read the
+* Set Working status (italic font on the name)
+
+* Attempt to read the
 source of the one page at the associated URL.
 
 * If this times out or yields an error,
-sets error status (strikout font) and returns.
+set error status (strikout font) and return.
 
-* Computes a hash based on selected elements of 
-the page and compares to the prior hash.
+* Save the text of the web page in memory for display
+if the user clicks the comic.
 
-* If the hash is different, sets New status (bold font),
+* If update days are known for this comic, and if
+this is not an update day, and an update day has not
+elapsed since the comic was last read: set Old status and return.
+
+* Compute a hash based on selected elements of 
+the page and compare to the prior hash.
+
+* If the hash is different, set New status (bold font),
 else Old status (normal font).
-
-* Saves the text of the web page in memory.
 
 Because refresh is in a separate thread, the user
 can display and read comics while others are being refreshed.
@@ -190,7 +196,7 @@ Shutdown Operation
 ------------------
 
 On shutdown, Cobro stores the current window geometry, and
-the name, URL, update days, and last hash value or each comic,
+the name, URL, update days, and last hash value of each comic,
 in the app settings.
 Location of settings depends on the OS:
 
