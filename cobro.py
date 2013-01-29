@@ -175,14 +175,16 @@ from HTMLParser import HTMLParser #2
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # some global constants
-URLTIMEOUT = 5 # timeout for urllib2.urlopen
+URLTIMEOUT = 8 # timeout for urllib2.urlopen
 GLOBALTIMEOUT = 10.0 # socket.setdefaulttimeout value
 # The status values of a comic.
 OLDCOMIC = 0 # status of previously-seen comic
 NEWCOMIC = 1 # status of an un-viewed comic (name in bold)
 BADCOMIC = 2 # status when URL couldn't be read (name strikethrough)
 WORKING = 3  # status while reading a url (name in italic)
-
+# the user agent string returned from QWebPage::userAgentForUrl(),
+# converted to a python string -- see main code far below.
+USERAGENT = u''
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Some message routines.
 
@@ -362,10 +364,12 @@ class myParser(HTMLParser):
 	#  in comics that use yahoo for analytics, yahoo.com/visit.gif has a random argument
 	#  some comics load different gravatars for no obvious reason
 	#  Savage Chickens injects random ads from its images directory
+	#  Ted Rall ends with a random number on cookies-for-comments
 	self.blacklist = ['images/goat',
 	                  'webhosting.yahoo',
 	                  'gravatar',
-	                  'savagechickens.com/images']
+	                  'savagechickens.com/images',
+	                  'cookies-for-comments']
     def read_hash(self) :
 	return bytes(self.sha1.digest())
     def handle_starttag(self, tag, attrs):
@@ -509,14 +513,16 @@ class WorkerBee ( QThread ) :
     # Python 3: changes below as noted
     
     def read_url(self,comic) :   
-	global URLTIMEOUT
+	global URLTIMEOUT, USERAGENT
         if 0 == len(comic.url.strip()) : # URL is a null or empty string
 	    comic.error = u'Empty URL string'
             return u'' # couldn't read that
         try:
             # Create an http "request" object for the URL
             ureq = urllib2.Request(comic.url)
-            ureq.add_header('User-agent', self.agent_string)
+	    # The commercial sites (comics.com) reject us unless we
+	    # show them a valid agent string.
+            ureq.add_header('User-agent', USERAGENT)
 	    # Blog-based sites reject us with 403 unless we have this:
 	    ureq.add_header('Accept', 'text/html')	    
 	    #print('    -- opening '+comic.url)
@@ -605,7 +611,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         settings.endGroup()
         settings.sync() # not supposed to be needed but does no harm
 
-    # Load the comics list from the saved settings, see save() below. What we
+    # Load the comics list from the saved settings, see save() above. What we
     # get via QSettings.value is QStrings, which we convert to python while
     # creating the Comic instance.
     def load(self, settings) :
@@ -1067,10 +1073,13 @@ You can find a copy of the GNU General Public License at:
 class CobroWebPage(QWebView) :
     def __init__(self, status, bar, parent=None) :
         global FontList, OLDCOMIC, WelcomeScreen
+	# Initialize the parent class, incidentally creating a QWebPage
         super(CobroWebPage, self).__init__(parent)
+	# Save access to main window's status line and progress bar widget
         self.statusLine = status
-        self.needUrlStatus = False
         self.progressBar = bar
+	# Set up a flag used while updating status, see startBar, rollBar below
+	self.needUrlStatus = False
         # make page unmodifiable
         self.page().setContentEditable(False)
         # set up the default font
@@ -1501,6 +1510,13 @@ if __name__ == "__main__":
     app.setOrganizationName("Tassosoft")
     app.setOrganizationDomain("tassos-oak.com")
     app.setApplicationName("Cobro")
+    app.setApplicationVersion("1.0")
+    # In order to use this feature of a QWebPage, we have to actually create
+    # the object in Python, we can't use the one created automatically as
+    # part of our QWebView. Now we have an app we can do that and throw it away.
+    wpage = QWebPage()
+    USERAGENT = wpage.userAgentForUrl(QUrl(u'http://www.google.com'))
+    wpage = None # toss the webpage
     # access the settings
     settings = QSettings()
     # construct the GUI
