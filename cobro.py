@@ -167,6 +167,7 @@ import hashlib # for sha-1
 import datetime # for today numbers
 import urllib2 # for reading urls, duh
 # Python 3.3 : import urllib
+import webbrowser # for platform-independent access to system default browser
 import re # regular expressions
 import os # getcwd
 import io # stringIO
@@ -643,10 +644,17 @@ class ConcreteListModel ( QAbstractListModel ) :
     # selecting, dragging. If the query is for the list parent, NOT an ordinary list
     # item, we allow dropping as well. This is what enables drag-to-reorder the list.
     def flags(self, parent) :
-        basic_flag = Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled | Qt.ItemIsEnabled
-        if parent.isValid() :
-            return basic_flag
-        return basic_flag | Qt.ItemIsDropEnabled
+	global worker_working
+        basic_flag = Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsEnabled
+	if not worker_working :
+	    # ok to do drag'n'drop
+	    if parent.isValid() :
+		# normal item, not the list itself
+		basic_flag |= Qt.ItemIsDragEnabled
+	    else :
+		# parent item, i.e. the whole list
+		basic_flag |= Qt.ItemIsDropEnabled
+        return basic_flag
 
     # Next, rowCount just says how many rows there are in the model data. We use this
     # from our own code later as well. Note the count of rows in an ordinary item is 0;
@@ -1020,8 +1028,8 @@ WelcomeScreen = QString(u'''
 to add a comic by name and URL.
 Start by adding some of these nerd favorites!
 Drag to select one these URLs;
-key ctl-c (mac: cmd-c) to copy;
-select File&gt;New Comic and fill in the name and update days.</p>
+key ctl-c or right-click to copy (mac: cmd-c or ctl-click);
+select File&gt;New Comic, and fill in the name and update days.</p>
 <table style='border-collapse:collapse; width:80%;margin:auto;'>
 <tr><td>Comic name</td><td>Comic URL</td><td>Updates</td></tr>
 <tr><td>XKCD</td><td>http://xkcd.com/</td><td>M-W-F</td></tr>
@@ -1031,25 +1039,27 @@ select File&gt;New Comic and fill in the name and update days.</p>
 <tr><td>Penny Arcade</td><td>http://www.penny-arcade.com/comic</td><td>weekdays</td></tr>
 <tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td><td>Sunday only</td></tr>
 </table>
-<p>That's enough! There are thousands of web comics,
-and every one has links to others that
-the artist likes! Look for nationally-syndicated (newspaper) cartoons at
-<a href='http://comics.com/'>Comics.com</a>, or check the website of your
-regional newspaper under "Entertainment". Then just explore!</p>
-<p>Change the list order by dragging and dropping.</p>
-<p>Double-click a comic to edit	its name, URL, or publication days.</p>
+<p>That's enough! There are thousands of web comics out there!
+For nationally-syndicated (newspaper) cartoons, try
+<a href='http://comics.com/'>Comics.com</a> or check the website of your
+regional newspaper under "Entertainment".</p>
 <p>To "refresh" a comic means to read its web page and see if it is
-different from the last time.</p><ul><li>
-While it is being read its name is <i>italic</i>.</li>
-<li>After reading, if we think it is different from the last time,
+different from the last time. All comics are refreshed in order when the app starts!</p>
+<ul><li>While it is being read a comic's name is <i>italic</i>.</li>
+<li>After reading, if it looks different from the last time,
 its name turns <b>bold</b>. (This is sometimes trigged by a change of
-ad copy or new comments, too.)</li>
-<li>If there is a problem reading it, its name is <strike>lined-out</strike>.</li>
+ad copy or comments.)</li>
+<li>If there is a problem reading it, its name is <strike>lined-out</strike>.
+Click on it to see the error message.</li>
 </ul>
-<p>All comics are refreshed at startup. Use File&gt;Refresh to
-refresh a new or edited comic.</p>
+<p>Use File&gt;Refresh to refresh a new or edited comic, or retry one with an error.
+When all refreshes are finished, you can rearrange the list order
+by dragging and dropping. Double-click a comic
+to edit its name, URL, or publication days.</p>
 <p>While browsing, use ctl-[ for "back" and ctl-] for "forward"
-(cmd-[ and cmd-] on a mac).</p>
+(cmd-[ and cmd-] on a mac). If you right-click on a link (mac: ctl-click),
+you get a context menu that you can use to copy the link or open it in
+your system default browser.</p>
 <p>When you quit the app, it saves the
 comic definitions in some magic settings place, depending your OS 
 (Registry, Library/Preferences, ~/.config).</p>
@@ -1057,7 +1067,7 @@ comic definitions in some magic settings place, depending your OS
 <p>Use File&gt;Import to read definitions from a text file and add them to the list
 (or to replace them, when the name's the same). For the import file format,
 export one comic and look at that output.</p>
-<p>That's it! Enjoy!</p>
+<p>That's it! Enjoy! Oh wait -- read the license!</p>
 <hr /><p>License (GPL-3.0):
 CoBro is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -1186,7 +1196,43 @@ class CobroWebPage(QWebView) :
 	else: # not a key we support, so,
 	    event.ignore()
 	super(CobroWebPage, self).keyPressEvent(event)
-
+    # Re-implement the parent's contextMenuEvent handler to do our own context
+    # menus in certain situations, but not all.
+    def contextMenuEvent (self, cx_event) :
+	main_frame = self.page().mainFrame()
+	hit_test = main_frame.hitTestContent(cx_event.pos())
+	hit_url = hit_test.linkUrl()
+	if not hit_url.isEmpty() :
+	    # The right-click (or whatever) was upon a link. In this case we want to
+	    # offer a custom context menu with two actions: copy link url and
+	    # open link in default browser. Annoyingly, the predefined "copy link" action 
+	    # provided by pageAction does not use the the global app clipboard. Since
+	    # we expect the user to paste a copied link in another app (e.g. browser)
+	    # we have to implement the copy action also.
+	    # First, save the target URL as a python string for our actions to use.
+	    self.contextUrl = unicode(hit_url.toString())
+	    # Next, create the custom two-action menu:
+	    ctx_menu = QMenu()
+	    # Action one is, copy link to clipboard
+	    ctx_copy = QAction(QString(u'Copy link to clipboard'),self)
+	    self.connect(ctx_copy, SIGNAL("triggered()"), self.copyLinkToClipboard)
+	    ctx_menu.addAction(ctx_copy)
+	    # Create the second action.
+	    ctx_open = QAction(QString(u'Open in default browser'),self)
+	    self.connect(ctx_open, SIGNAL("triggered()"), self.openInDefaultBrowser)
+	    ctx_menu.addAction(ctx_open)
+	    # Now show the menu.
+	    ctx_menu.exec_(cx_event.globalPos())
+	else:
+	    # the thing right-clicked was not a link, so, meh.
+	    super(CobroWebPage, self).contextMenuEvent(cx_event)
+    # Here are the slots for our two context menu actions.
+    # The URL of the clicked link has been saved as a python string already.
+    def copyLinkToClipboard(self) :
+	QApplication.clipboard().setText(self.contextUrl)
+    def openInDefaultBrowser(self) :
+	webbrowser.open_new(self.contextUrl)
+	
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the application window incorporating the list and webview.
 # The one class of this object also catches shut-down.
@@ -1195,7 +1241,7 @@ class CobroWebPage(QWebView) :
 # That class requires us to supply the real window contents as a widget
 # (not just a layout) so we create that widget first.
 #
-class theAppWindow(QMainWindow) : # or maybe, QMainWindow?
+class theAppWindow(QMainWindow) :
     def __init__(self, settings, parent=None) :
         super(theAppWindow, self).__init__(parent)
         # Save the settings instance for use at shutdown (see below)
