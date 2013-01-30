@@ -11,10 +11,11 @@ That location also has a couple of lists of comics that CoBro can import.
 
 Binary executables for Windows and Mac OS can be downloaded at
 https://www.dropbox.com/sh/ovgn8muzrn5nsku/0x0KUtOPxo/CoBro
-In case you got these from some other source, the md5 signatures are:
+If you should get these from some other source, the md5 signatures 
+ought to be:
 
-    cobro-mac.zip = 32381b38b58074a8d85f0d843990fe9f
-    cobro-win.zip = 409dc800545ee194c149b6e06192fefd
+    cobro-mac.zip = 9d2cceeabc4ade0f3b50d786eb8c45e9
+    cobro-win.zip = c47d581de24b10ad4415bcff64e38247
 
 The Inspiration: Comictastic
 ----------------------------
@@ -92,6 +93,15 @@ since the last time.
 
 * Strikethrough: an error occurred reading this comic.
 
+When the user clicks on a comic name in the list,
+the contents read from its URL are passed
+to the QWebView for rendering.
+(If there was an error reading the comic, an
+explanatory error message is generated and passed for display.)
+
+Rendering may take time if the comic links numerous ads and images,
+so a progress bar is displayed.
+
 Double-clicking a name opens a dialog to edit the name, URL,
 and update schedule.
 
@@ -102,7 +112,7 @@ The browser pane is a QWebView widget, a fully functional
 browser based on WebKit.
 The QWebview is configured to disable java
 but to permit javascript and plug-ins, because
-some comics require Flash.
+some comics require scripts and Flash.
 The following keystrokes are implemented:
 
 * Browser "back" on ctl/cmd-left, ctl/cmd-b, ctl/cmd-[
@@ -113,6 +123,11 @@ The following keystrokes are implemented:
 
 * Copy selected text to clipboard on ctl/cmd-c
 
+Also the context menu raised by ctl/cmd-click on a link
+has the options: copy link to clipboard, and open link in
+default browser. This allows an easy escape to open, for
+example, the "prior" or "about" link of a comic in a "real"
+browser.
 
 File Menu
 ---------
@@ -151,11 +166,7 @@ Bad (error reading URL) or Working (read in progress)
 
 * after a refresh, the HTML contents read from the URL
 
-When the user clicks on a comic name in the list,
-the contents read from its URL are passed
-to the QWebView for rendering.
-This may take time if the page links numerous ads and images,
-so a progress bar is displayed.
+* after a failed refresh, a character string describing the error
 
 
 Refresh Operation
@@ -163,8 +174,9 @@ Refresh Operation
 
 When the app starts up it refreshes all comics automatically.
 This and File>Refresh are the same:
-The app passes the (selected) items to a separate QThread.
-The thread processes comics one at a time:
+The app queues the (selected) comics for processing by
+a separate QThread.
+The thread processes comics one at a time as follows:
 
 * Set Working status (italic font on the name)
 
@@ -172,14 +184,16 @@ The thread processes comics one at a time:
 source of the one page at the associated URL.
 
 * If this times out or yields an error,
-set error status (strikout font) and return.
+set error status (strikout font), store an error string,
+and return.
 
 * Save the text of the web page in memory for display
 if the user clicks the comic.
 
-* If update days are known for this comic, and if
-this is not an update day, and an update day has not
-elapsed since the comic was last read: set Old status and return.
+* If update days are known for this comic,
+_and_ if this is not an update day,
+_and_ an update day has not elapsed since the comic was last read:
+set Old status and return.
 
 * Compute a hash based on selected elements of 
 the page and compare to the prior hash.
