@@ -1022,6 +1022,7 @@ class CobroListView(QListView) :
 WelcomeScreen = QString(u'''
 <div style='text-align:center; height:6em; background-color:#444; color:#E0E; border:2px solid black;'>
 <h2>Welcome to CoBro!</h2>
+<p style='font-size:smaller;'>Version 1.0.0 30 Jan 13</p>
 </div>
 <p>Single-click a comic name to display its page in this browser.</p>
 <p>No comics in the list? Use File&gt;New Comic
@@ -1063,8 +1064,8 @@ your system default browser.</p>
 <p>When you quit the app, it saves the
 comic definitions in some magic settings place, depending your OS 
 (Registry, Library/Preferences, ~/.config).</p>
-<p>Use File&gt;Export to write definitions of the selected comics to a text file.</p>
-<p>Use File&gt;Import to read definitions from a text file and add them to the list
+<p>Use File&gt;Export to write definitions of the selected comics to a text file.
+Use File&gt;Import to read definitions from a text file and add them to the list
 (or to replace them, when the name's the same). For the import file format,
 export one comic and look at that output.</p>
 <p>That's it! Enjoy! Oh wait -- read the license!</p>
