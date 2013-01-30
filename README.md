@@ -1,7 +1,7 @@
 COBRO: A Comics Browser
 =======================
 
-CoBro is a very simple web browser designed to store and display
+CoBro is a simple web browser designed to store and display
 a list of web comics. It shows the user which comics have been
 updated since they were last viewed. In general its aim is to make
 it quick and simple to enjoy one's daily comics.
