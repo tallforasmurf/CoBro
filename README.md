@@ -49,7 +49,7 @@ However, a general-purpose browser is not
 a good way to read comics because it lacks the three
 best features of Comictastic:
 
-* A scrolling list of names that can be clicked to show a comic instantly;
+* It shows a list of names that can be clicked to show a comic instantly;
 
 * It starts pre-loading comics as soon as the program launches;
 
@@ -83,7 +83,7 @@ and can be
 reordered by dragging.
 The font style of each name indicates that comic's status:
 
-* Normal: comic available but it contents are unchanged from
+* Normal: comic available but its contents are unchanged from
 the last time it was read.
 
 * Bold: comic is available with contents that appear to be updated
@@ -93,15 +93,6 @@ since the last time.
 
 * Strikethrough: an error occurred reading this comic.
 
-When the user clicks on a comic name in the list,
-the contents read from its URL are passed
-to the QWebView for rendering.
-(If there was an error reading the comic, an
-explanatory error message is generated and passed for display.)
-
-Rendering may take time if the comic links numerous ads and images,
-so a progress bar is displayed.
-
 Double-clicking a name opens a dialog to edit the name, URL,
 and update schedule.
 
@@ -109,10 +100,22 @@ The Browser
 -----------
 
 The browser pane is a QWebView widget, a fully functional
-browser based on WebKit.
+browser based on WebKit. When the app starts up, a welcome
+message with how-to-use text is displayed.
+
 The QWebview is configured to disable java
 but to permit javascript and plug-ins, because
 some comics require scripts and Flash.
+
+When the user clicks on a comic name in the list,
+the contents read from its URL are passed
+to the QWebView for rendering.
+If there was an error reading the comic, an
+explanatory error message is displayed instead.
+
+Rendering may take time if the comic links to numerous ads and images,
+so a progress bar is displayed.
+
 The following keystrokes are implemented:
 
 * Browser "back" on ctl/cmd-left, ctl/cmd-b, ctl/cmd-[
@@ -123,11 +126,14 @@ The following keystrokes are implemented:
 
 * Copy selected text to clipboard on ctl/cmd-c
 
-Also the context menu raised by ctl/cmd-click on a link
-has the options: copy link to clipboard, and open link in
-default browser. This allows an easy escape to open, for
-example, the "prior" or "about" link of a comic in a "real"
-browser.
+Using a "back" key from the first page of a comic brings back
+the display of the welcome message.
+
+The user can ctl/cmd-click on any link to bring up a context menu
+with the options Copy link to clipboard and Open link in
+default browser. This allows an easy escape for
+example to bring up the Archives or About link of a comic
+in a "real" browser.
 
 File Menu
 ---------
@@ -135,7 +141,7 @@ File Menu
 The only other controls are in the File menu:
 
 * New Comic opens a dialog to define a comic by name, URL, and
-update schedule, adding it to the list.
+update schedule, adding it to the end of the list.
 
 * Refresh (re)loads the source of the comic(s) currently
 selected in the list.
@@ -163,6 +169,8 @@ With each name is associated these data:
 
 * the status of the comic: New, Old,
 Bad (error reading URL) or Working (read in progress)
+
+* the date on which it was last read by this app
 
 * after a refresh, the HTML contents read from the URL
 
@@ -204,15 +212,17 @@ else Old status (normal font).
 Because refresh is in a separate thread, the user
 can display and read comics while others are being refreshed.
 The user can begin reading comics as soon as the first comic 
-in the list has changed from Working (italic) font.
+in the list has changed from Working (italic) font to normal
+or bold font.
 
 Shutdown Operation
 ------------------
 
 On shutdown, Cobro stores the current window geometry, and
-the name, URL, update days, and last hash value of each comic,
-in the app settings.
-Location of settings depends on the OS:
+for each comic it name, URL, update days, day last read,
+and last hash value.
+These data go into the app settings.
+The location of settings depends on the OS:
 
 * Windows: Registry under Tassosoft/Cobro
 
