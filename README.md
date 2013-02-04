@@ -219,7 +219,7 @@ Shutdown Operation
 ------------------
 
 On shutdown, Cobro stores the current window geometry, and
-for each comic it name, URL, update days, day last read,
+for each comic its name, URL, update days, day last read,
 and last hash value.
 These data go into the app settings.
 The location of settings depends on the OS:
