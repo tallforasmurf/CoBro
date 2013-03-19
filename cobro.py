@@ -1111,7 +1111,12 @@ class CobroWebPage(QWebView) :
         self.settings().setFontSize(QWebSettings.DefaultFontSize, 16)
         self.settings().setFontSize(QWebSettings.MinimumFontSize, 6)
         self.settings().setFontSize(QWebSettings.MinimumLogicalFontSize, 6)
-        self.textZoomFactor = 1.0
+	# set our zoom factor which is changed by keys ctl-plus/minus
+	self.ourZoomFactor = 1.0
+	# We no longer set textSizeMultiplier because doing so forces ON
+	# the setting ZoomTextOnly. Just use zoomFactor.
+	#self.setTextSizeMultiplier(self.ourZoomFactor)
+        self.setZoomFactor(self.ourZoomFactor)
         # Disable scripting! Well, actually, quite a few comics need j'script,
         # including (darn it) the SMBC red button!
         self.settings().setAttribute(QWebSettings.JavascriptEnabled, True)
@@ -1177,11 +1182,11 @@ class CobroWebPage(QWebView) :
     # * browser forward on ctl-], ctl-right
     # * copy selected to clipboard on ctl-c
     # For the font size, we initialize the view at 16 points and
-    # the textSizeMultiplier at 1.0. Each time the user hits ctl-minus
+    # the zoom factor at 1.0. Each time the user hits ctl-minus
     # we deduct 0.0625 from the multiplier, and for each ctl-+ we add 0.0625
-    # (1/16) to the multiplier. This ought to cause the view to change up or
-    # down by about one point. We set a limit of 0.375 (6 points) at the low
-    # end and 4.0 (64 points) at the top.
+    # (1/16) to the multiplier. This ought to cause the view to change text
+    # sizes up or down by about one point and images by a bit.
+    # We set limits of 0.375 (6 points) and 4.0 (64 points).
     def keyPressEvent(self, event):
 	kkey = int( int(event.modifiers()) & self.keypadDeModifier) | int(event.key())
 	if (kkey in self.zoomKeys) : # ctrl-plus/minus
@@ -1189,10 +1194,10 @@ class CobroWebPage(QWebView) :
 	    zfactor = 0.0625 # zoom in
 	    if (kkey == self.ctl_minus) :
 		zfactor = -zfactor # zoom out
-	    zfactor += self.textZoomFactor
+	    zfactor += self.ourZoomFactor
 	    if (zfactor > 0.374) and (zfactor < 4.0) :
-		self.textZoomFactor = zfactor
-		self.setTextSizeMultiplier(self.textZoomFactor)
+		self.ourZoomFactor = zfactor
+		self.setZoomFactor(self.ourZoomFactor)
 	elif (kkey in self.backKeys) :
 	    event.accept()
 	    if self.page().history().canGoBack() :
