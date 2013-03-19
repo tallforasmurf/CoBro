@@ -143,6 +143,7 @@ from PyQt4.QtGui import (
     QFileDialog,
     QFont,
     QFontInfo,
+    QItemSelection,
     QKeySequence,
     QLabel,
     QLineEdit,
@@ -915,7 +916,7 @@ class CobroListView(QListView) :
         # Save reference to our browser window for use in itemClicked
         self.webview = browser
 	# flag where we prevent a recursion loop on dataChanged signal!
-	self.recursing = False
+	self.displaying = False
         # Set all the many properties of a ListView/AbstractItemView in
         # alphabetic order as listed in the QAbstractItemView class ref.
         # alternate the colors of the list, like greenbar paper (nostalgia)
@@ -949,24 +950,58 @@ class CobroListView(QListView) :
         self.setViewMode(QListView.ListMode)
         # list view: allow movement (overrides static set by above)
         self.setMovement(QListView.Free)
-        # handle click-on-item to display a comic
-        self.connect(self,SIGNAL('clicked(QModelIndex)'),self.itemClicked)
 
-    # If I read the doc correctly, this signal is generated as a result of
-    # a mouseReleaseEvent when the mouse is over a list item (and not over
-    # something else, like a scrollbar). This is the time to display the
-    # item URL in our web browser.
-    def itemClicked(self, index) :
+    # Intercept the selectionChanged event. The two arguments are QItemSelection
+    # objects. The first lists the items that are newly selected as the result of
+    # some event (like a shift-click). The second lists the items that are no
+    # longer selected ditto, as in control-click. These are pretty much useless
+    # for our purposes. What we want to know is, what is selected now and is there
+    # just one item? If so, then display that item. If 0 or more than one selected,
+    # do nothing.
+    def selectionChanged(self, selected, deselected):
+	list_of_indexes = self.selectedIndexes()
+	if not 1 == len(list_of_indexes) :
+	    return
+	self.itemDisplay(list_of_indexes[0])
+    
+    # Override the dataChanged slot in order to redisplay a web page, in the
+    # event that the item being changed is exactly the one item selected, and
+    # its status is OLD, NEW or BAD. In that case, use self.itemClicked to 
+    # start a redisplay of its html.
+    def dataChanged(self, topLeft, bottomRight ) :
+	if not self.displaying: # signal didn't come as a result of itemDisplay below
+	    top_left_row = topLeft.row()
+	    if top_left_row == bottomRight.row() :
+		# just one item being changed
+		selection = self.selectedIndexes()
+		if len(selection) == 1 :
+		    # just one item is selected
+		    sel_item = selection[0]
+		    if sel_item.row() == top_left_row :
+			# that item is the one item currently highlited in the list
+			# is it in displayable state (or is it "working" or invalid)?
+			comic = comics[top_left_row]
+			if comic.status in [NEWCOMIC, BADCOMIC, OLDCOMIC] :
+			    # yeah, so update the html display
+			    self.itemDisplay(sel_item)
+	# irregardless, pass the signal on to the parent
+	super(CobroListView,self).dataChanged(topLeft, bottomRight)
+	
+    # It is the time to display one item's URL in our web browser.
+    # Some things we do here (changing the font) can trigger a dataChanged
+    # signal. To avoid a recursive loop we set a flag self.displaying.
+    def itemDisplay(self, index) :
         global comics, OLDCOMIC, NEWCOMIC, BADCOMIC, StatusRole, LastViewRole
-	self.recursing = True
+	self.displaying = True
         comic = comics[index.row()]
+	# Tell the web page, whatever it's working on, stop it.
 	self.webview.page().triggerAction(QWebPage.Stop)
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
             # so, not a bad comic or a working comic
             if len(comic.page) :
-                # Pass the current page data into our web viewer. First tell
-                # it to stop, if it happens to be loading something else.
+                # Pass the current page data into our web viewer.
                 self.webview.setHtml( QString(comic.page), QUrl(QString(comic.url)) )
+		# set the font to show it has been seen.
                 self.model().setData(index, QVariant(OLDCOMIC), StatusRole)
             else :
                 # No page data has been read -- perhaps this is a new comic 
@@ -989,30 +1024,7 @@ class CobroListView(QListView) :
 	    <p style='text-align:center;margin-top:8em;'>
 	    I'm working on it, alright? Geez, gimme a sec...</p>'''),
                                   QUrl())
-	self.recursing = False
-    
-    # Override the dataChanged slot in order to redisplay a web page, in the
-    # event that the item being changed is exactly the one item selected, and
-    # its status is OLD, NEW or BAD. In that case, use self.itemClicked to 
-    # start a redisplay of its html.
-    def dataChanged(self, topLeft, bottomRight ) :
-	if not self.recursing: # signal didn't come as a result of itemClicked above
-	    top_left_row = topLeft.row()
-	    if top_left_row == bottomRight.row() :
-		# just one item being changed
-		selection = self.selectedIndexes()
-		if len(selection) == 1 :
-		    # just one item is selected
-		    sel_item = selection[0]
-		    if sel_item.row() == top_left_row :
-			# that item is the one item currently highlited in the list
-			# is it in displayable state (or is it "working" or invalid)?
-			comic = comics[top_left_row]
-			if comic.status in [NEWCOMIC, BADCOMIC, OLDCOMIC] :
-			    # yeah, so update the html display
-			    self.itemClicked(sel_item)
-	# irregardless, pass the signal on to the parent
-	super(CobroListView,self).dataChanged(topLeft, bottomRight)
+	self.displaying = False
 	
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the web page display, based on QWebView with added behaviors.
@@ -1542,6 +1554,7 @@ class theAppWindow(QMainWindow) :
         self.settings.setValue("cobro/size",self.size())
         self.settings.setValue("cobro/position", self.pos())
         self.model.save(self.settings)
+	event.accept()
 
 if __name__ == "__main__":
     # Set the global default timeout value in a (probably vain) hope
