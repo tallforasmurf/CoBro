@@ -1097,11 +1097,13 @@ You can find a copy of the GNU General Public License at:
                              ''')
 
 class CobroWebPage(QWebView) :
-    def __init__(self, status, bar, parent=None) :
+    def __init__(self, status, bar, parent) :
         global FontList, OLDCOMIC, WelcomeScreen
-	# Initialize the parent class, incidentally creating a QWebPage
+	# Initialize the root class, incidentally creating a QWebPage
         super(CobroWebPage, self).__init__(parent)
-	# Save access to main window's status line and progress bar widget
+	# Save access to the main window (our parent) and
+	# separately to its status line and progress bar widgets
+	self.main = parent
         self.statusLine = status
         self.progressBar = bar
 	# Set up a flag used while updating status, see startBar, rollBar below
@@ -1138,6 +1140,8 @@ class CobroWebPage(QWebView) :
 	# follow it but instead raise the linkClicked signal. Connect the signal.
 	self.page().setLinkDelegationPolicy(QWebPage.DelegateExternalLinks)
 	self.connect( self, SIGNAL(u"linkClicked(QUrl)"), self.linkClicked )
+	# Connect the titleChanged signal to our slot.
+	self.connect( self, SIGNAL(u"titleChanged(QString)"), self.newTitle )
 	# Set up constants for key values so as not to bog down the keypress event.
 	#  - mask to turn off keypad indicator, making all plus/minus alike
 	self.keypadDeModifier = int(0xffffffff ^ Qt.KeypadModifier)
@@ -1193,6 +1197,12 @@ class CobroWebPage(QWebView) :
 	self.settings().clearMemoryCaches()
 	self.setUrl(url)
 
+    # Slot to receive the titleChanged signal. Change the title of the
+    # main window to match.
+    def newTitle(self, qstitle):
+	#print(unicode(qstitle))
+	self.main.setWindowTitle(qstitle)
+	
     # Re-implement the parent's keyPressEvent in order to provide:
     # * font-size-zoom from ctl-plus/ctl-minus,
     # * browser back on ctl-[, ctl-b, ctl-left
@@ -1299,7 +1309,7 @@ class theAppWindow(QMainWindow) :
         self.progressBar.setTextVisible(False)
         # Create the webrowser: a WebPage in a WebView. The web view needs
         # access to the progress and status br
-        self.page = CobroWebPage(self.statusLine, self.progressBar)
+        self.page = CobroWebPage(self.statusLine, self.progressBar, self)
         # Create the List View, which needs access to the model (for comics)
         # and the web view (to display a comic)
         self.view =  CobroListView(self.model, self.page)
