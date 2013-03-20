@@ -994,8 +994,11 @@ class CobroListView(QListView) :
         global comics, OLDCOMIC, NEWCOMIC, BADCOMIC, StatusRole, LastViewRole
 	self.displaying = True
         comic = comics[index.row()]
-	# Tell the web page, whatever it's working on, stop it.
+	# Tell the web page, whatever it's working on, stop it. Then clear its
+	# cache. Make every comic start fresh. This is an attempt to work around
+	# a webkit bug.
 	self.webview.page().triggerAction(QWebPage.Stop)
+	self.webview.settings().clearMemoryCaches()
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
             # so, not a bad comic or a working comic
             if len(comic.page) :
@@ -1131,6 +1134,10 @@ class CobroWebPage(QWebView) :
         self.connect( self, SIGNAL(u'loadStarted()'), self.startBar )
         self.connect( self, SIGNAL(u'loadProgress(int)'), self.rollBar )
         self.connect( self, SIGNAL(u'loadFinished(bool)'), self.endBar )
+	# Set our Page to "delegate" all links, that is, when a link is clicked do not
+	# follow it but instead raise the linkClicked signal. Connect the signal.
+	self.page().setLinkDelegationPolicy(QWebPage.DelegateExternalLinks)
+	self.connect( self, SIGNAL(u"linkClicked(QUrl)"), self.linkClicked )
 	# Set up constants for key values so as not to bog down the keypress event.
 	#  - mask to turn off keypad indicator, making all plus/minus alike
 	self.keypadDeModifier = int(0xffffffff ^ Qt.KeypadModifier)
@@ -1175,6 +1182,16 @@ class CobroWebPage(QWebView) :
         self.statusLine.clear()
         if not ok : 
             self.statusLine.setText(u"Some error")
+
+    # Slot to receive the linkClicked signal. Stop any ongoing action.
+    # Clear memory caches. Then complete the link action by calling self.setUrl.
+    # The purpose here is to work around a webkit bug that is triggered by
+    # certain comics, esp. "Dork Toes".
+    def linkClicked(self, url):
+	#print(unicode(url.toString()))
+	self.page().triggerAction(QWebPage.Stop)
+	self.settings().clearMemoryCaches()
+	self.setUrl(url)
 
     # Re-implement the parent's keyPressEvent in order to provide:
     # * font-size-zoom from ctl-plus/ctl-minus,
