@@ -9,13 +9,8 @@ it quick and simple to enjoy one's daily comics.
 CoBro source can be viewed here: https://github.com/tallforasmurf/CoBro
 That location also has a couple of lists of comics that CoBro can import.
 
-Binary executables for Windows and Mac OS can be downloaded at
-https://www.dropbox.com/sh/ovgn8muzrn5nsku/0x0KUtOPxo/CoBro
-If you should get these from some other source, the md5 signatures 
-ought to be:
-
-    cobro-mac.zip = 9d2cceeabc4ade0f3b50d786eb8c45e9
-    cobro-win.zip = c47d581de24b10ad4415bcff64e38247
+At the moment CoBro is Python source only. Hopefully soon
+it will be available for at least MacOS as a binary app.
 
 The Inspiration: Comictastic
 ----------------------------
@@ -30,15 +25,14 @@ so it can't be forked and tinkered-with.
 Most important, Comictastic is a web scraper:
 it fetches only the image of the comic and doesn't render
 any more of the comic's web page.
-That's a drawback for the user and for the artists.
-The comic artist loses out on visitor counts and on ad revenue.
-The user loses out on HTML features
+That's a drawback;
+the comic artist loses out on visitor counts and ad revenue,
+and the user loses out on features
 like the Red Button at SMBC,
 or the title text that pops up when hovering the XKCD image,
-or the previous/next/first nav links,
-or links to a comic's About or Cast page.
+or the nav. links previous/next/first, About or Cast.
 
-A Specialty Browser
+Comics Need a Specialty Browser
 -------------------
 
 I thought a long time about writing a better comic scraper,
@@ -49,31 +43,29 @@ However, a general-purpose browser is not
 a good way to read comics because it lacks the three
 best features of Comictastic:
 
-* It shows a list of names that can be clicked to show a comic instantly;
+* A list of names that can be clicked to show a comic instantly;
 
-* It starts pre-loading comics as soon as the program launches;
+* Pre-loading comics as soon as the program launches;
 
-* It displays comic names in bold to show an unread episode.
+* Comic names in bold to show an unread episode.
 
 Also I don't want to mix 20+ comic bookmarks with all my
-other browser bookmarks. An RSS reader
-like Google Reader comes closer, but not all comics
+other browser bookmarks. An RSS reader works, but not all comics
 have RSS feeds, and it is possible to read with even fewer
 clicks in a special-purpose app.
 
 So: A very simple web browser designed just for
-reading web comics. Qt via PyQt gives me the materials to build this.
+reading web comics. Qt via PyQt has the materials to build this.
 
 THE SPEC
 ========
 
-CoBro (Comics Browser) is a simple app written in Python (2.6 or 2.7;
-will move to 3.3 as soon as pyinstaller supports it), using
-PyQt4 and Qt4 (Qt5 TBS).
+CoBro (Comics Browser) is a simple app written in Python 3.3,
+PyQt5 and Qt5.2.
 
 CoBro provides a single window containing
 a scrolling list of comic names on the left
-and a large QWebView (browser) pane on the right.
+and a QWebView (browser) pane on the right.
 
 The List
 --------
@@ -93,8 +85,7 @@ since the last time.
 
 * Strikethrough: an error occurred reading this comic.
 
-Double-clicking a name opens a dialog to edit the name, URL,
-and update schedule.
+Double-clicking a name opens a dialog to edit the name and URL.
 
 The Browser
 -----------
@@ -130,8 +121,8 @@ Using a "back" key from the first page of a comic brings back
 the display of the welcome message.
 
 The user can ctl/cmd-click on any link to bring up a context menu
-with the options Copy link to clipboard and Open link in
-default browser. This allows an easy escape for
+with the options "Copy link to clipboard" and "Open link in
+default browser". This allows an easy escape for
 example to bring up the Archives or About link of a comic
 in a "real" browser.
 
@@ -140,18 +131,19 @@ File Menu
 
 The only other controls are in the File menu:
 
-* New Comic opens a dialog to define a comic by name, URL, and
-update schedule, adding it to the end of the list.
+* New Comic opens a dialog to define a comic by name and URL,
+adding it to the end of the list.
 
 * Refresh (re)loads the source of the comic(s) currently
 selected in the list.
 
-* Delete deletes the selected comic(s) after getting an ok from the user.
+* Delete deletes the selected comic(s)
+after getting an ok from the user.
 
-* Export writes the selected comic(s) to a CSV text file,
+* Export writes the selected comic(s) to a UTF-8 text file in CSV format,
 including boilerplate text documenting the file format.
 
-* Import reads a CSV file in the Export format and adds or
+* Import reads a UTF-8 file of CSV data in the Export format and adds or
 replaces the comics in the list.
 
 * Quit (in Windows, clicking the dismiss button)
@@ -163,14 +155,10 @@ Stored Data
 With each name is associated these data:
 * the comic's URL, e.g. "http://www.gocomics.com/stonesoup"
 
-* the days of the week when it is scheduled to update (if known)
-
 * an SHA-1 hash based on the last-read page of this comic
 
 * the status of the comic: New, Old,
 Bad (error reading URL) or Working (read in progress)
-
-* the date on which it was last read by this app
 
 * after a refresh, the HTML contents read from the URL
 
@@ -219,8 +207,7 @@ Shutdown Operation
 ------------------
 
 On shutdown, Cobro stores the current window geometry, and
-for each comic its name, URL, update days, day last read,
-and last hash value.
+for each comic its name, URL, and last hash value.
 These data go into the app settings.
 The location of settings depends on the OS:
 
