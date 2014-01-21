@@ -1,45 +1,39 @@
-
 # A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
-# comic is defined on a single line by two or three quoted strings.
+# comic is defined on a single line by two quoted strings.
 # The first string is the comic name. The second string is its URL.
-# The optional third string is exactly seven letters long and stands for the days
-# of the week Monday to Sunday. A hyphen means "no update" and a non-hyphen
-# means "updates this day" so: 'Bug Comic', 'http://www.bugcomic.com', 'MTWTF--'
-# When the third string is omitted the default is "test for update every day".
+# Example: 'Bug Comic', 'http://www.bugcomic.com'
 # The strings are delimited by 'single' or "double" quotes (sorry no guillemets)
-# and separated by spaces and/or commas. All lines that don't match are ignored
-# and can be used as commentary, like these lines.
+# and separated by spaces and/or commas. All lines that don't match
+# that format are ignored, and can be used as commentary, like these lines.
 
 * The following comics, although they are some of the funniest things on
 * the internet, are frequently explicit about adult subjects and language.
 
-'A Multiverse', 'http://amultiverse.com/', 'MTWTF--'
-'ChuckleADuck', 'http://chuckleaduck.com/', '-------'
-'Cy & H', 'http://www.explosm.net/comics/', '-------'
-'Dinosaur Comics', 'http://www.qwantz.com/index.php', 'MTWTFSS'
-'Doghouse Diaries', 'http://thedoghousediaries.com/', '-------'
-'Gregor Comics', 'http://gregor-comics.com/', '-------'
-'Happle Tea', 'http://happletea.com/', '-T--F--'
+'A Multiverse', 'http://amultiverse.com/'
+'ChuckleADuck', 'http://chuckleaduck.com/'
+'Cy & H', 'http://www.explosm.net/comics/'
+'Dinosaur Comics', 'http://www.qwantz.com/index.php'
+'Doghouse Diaries', 'http://thedoghousediaries.com/'
+'Gregor Comics', 'http://gregor-comics.com/'
 'Jesus and Mo', 'http://www.jesusandmo.net/', '-------'
-'Megacynics', 'http://www.megacynics.com/', 'M-W-F--'
-'PhD Comics', 'http://www.phdcomics.com/comics.php', '-------'
-'Questionable Content', 'http://questionablecontent.net/', 'MTWTF--'
-'Romantically Apocalyptic', 'http://romanticallyapocalyptic.com/', '-------'
-'Sinfest', 'http://www.sinfest.net/', '-------'
-'SMBC', 'http://www.smbc-comics.com/', '-------'
-'Toothpaste For Dinner', 'http://www.toothpastefordinner.com/', '-------'
-'Tree Lobsters', 'http://www.treelobsters.com/', '-------'
-'The Strip', 'http://www.nytimes.com/thestrip', '------S'
-'Buttersafe', 'http://buttersafe.com', '-T-T---'
-'Hark! A Vagrant!', 'http://www.harkavagrant.com/index.php', '-------'
-'Johny Wander', 'http://www.johnnywander.com', '-T----S'
-'Collected Curios (multicomic)', 'http://www.collectedcurios.com/', '-------'
-'Extra Ordinary', 'http://www.exocomics.com', '-------'
-'POPsickleSTRIP', 'http://popstrip.com/', '-------'
-'Squid Row', 'http://squidrowcomics.com', 'MTWTFSS'
-'Two Guys and a Guy', 'http://www.twogag.com', 'M-W-F--'
-'Dork Toes', 'http://dorktoescomic.com/', '-T-----'
+'Megacynics', 'http://www.megacynics.com/'
+'PhD Comics', 'http://www.phdcomics.com/comics.php'
+'Questionable Content', 'http://questionablecontent.net/'
+'Romantically Apocalyptic', 'http://romanticallyapocalyptic.com/'
+'Sinfest', 'http://www.sinfest.net/'
+'SMBC', 'http://www.smbc-comics.com/'
+'Toothpaste For Dinner', 'http://www.toothpastefordinner.com/'
+'Tree Lobsters', 'http://www.treelobsters.com/'
+'Buttersafe', 'http://buttersafe.com'
+'Hark! A Vagrant!', 'http://www.harkavagrant.com/index.php'
+'Johny Wander', 'http://www.johnnywander.com'
+'Collected Curios (multicomic)', 'http://www.collectedcurios.com/'
+'Extra Ordinary', 'http://www.exocomics.com'
+'POPsickleSTRIP', 'http://popstrip.com/'
+'Squid Row', 'http://squidrowcomics.com'
+'Two Guys and Guy', 'http://www.twogag.com'
+'Dork Toes', 'http://dorktoescomic.com/'
 # note apostrophe in "Fredo and Pid'Jin" is a big no-no!!!
-'Fredo and Pidjin', 'http://www.pidjin.net/', '--W----'
-'Girls with Slingshots', 'http://www.girlswithslingshots.com/', 'MTWTF--'
-'Ctrl-Alt-Del', 'http://www.cad-comic.com/cad/', 'M-W-F--'
+'Fredo and Pidjin', 'http://www.pidjin.net/'
+'Girls with Slingshots', 'http://www.girlswithslingshots.com/'
+'Ctrl-Alt-Del', 'http://www.cad-comic.com/cad/'
