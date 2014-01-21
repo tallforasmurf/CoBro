@@ -1658,7 +1658,10 @@ class theAppWindow(QMainWindow) :
 
 if __name__ == "__main__":
 
-    import sys # for argv to pass to QApplication
+    import sys # for argv
+    import logging
+    import argparse
+
     # Create the App so all the other Qt stuff will work
     app = QApplication(sys.argv)
     # Set up the parameters of our QSettings, in which the comics
@@ -1672,14 +1675,6 @@ if __name__ == "__main__":
 
     # setup the font globals
     setup_jolly_fonts()
-    #assert FONTLIST[3].family() == 'Comic Sans'
-    #assert FONTLIST[NEWCOMIC].bold()
-    #assert FONTLIST[BADCOMIC].strikeOut()
-    #assert FONTLIST[WORKING].italic()
-    ## test messages
-    #infoMsg('This is message', 'This explains it')
-    #warningMsg('This is a warning', 'Because <i>reasons</i>!')
-    #okCancelMsg('Do you or do you <b>not</b>', "or don't you?")
 
     # Get a valid User Agent string, without which many sites won't talk to us.
     #
@@ -1696,6 +1691,27 @@ if __name__ == "__main__":
     import socket
     if socket.getdefaulttimeout() is None :
         socket.setdefaulttimeout(10)
+
+    # parse for command line arguments which currently relate only to
+    # logging: --level=[INFO|ERROR] --logfile=filepath
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--level',dest='level',
+                        choices=['INFO','ERROR'],default='ERROR',
+                        help='use INFO to see items hashed for each comic')
+    parser.add_argument('--logfile',dest='logfile',type=argparse.FileType('w'),
+                        help='specify a text file to receive log data in place of stderr',
+                        default=None)
+    args = parser.parse_args()
+
+    # Set up simple logging to stderr...
+    import logging
+    lvl = logging.ERROR
+    if args.level == 'INFO' :
+        lvl = logging.INFO
+    if args.logfile is None :
+        logging.basicConfig( level=lvl )
+    else :
+        logging.basicConfig( level=lvl, stream=args.logfile )
 
     # Construct the GUI, passing it our Settings object to use for loading.
     # Display it, and run the app's event handling loop.
