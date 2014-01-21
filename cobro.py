@@ -467,7 +467,9 @@ class myParser(HTMLParser):
                         if nono in val :
                             return # bad image, do not include in hash
                     #print(val) #dbg: make a record of the hash input
-                    self.sha1.update(val.encode('utf-8','ignore'))
+                    val = val.encode('utf-8','ignore')
+                    logging.info('  hash: %s', val)
+                    self.sha1.update(val)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #   Synchronization between the main thread and the refresh thread.
@@ -557,11 +559,13 @@ class WorkerBee ( QThread ) :
         self.statusChanged.emit( row, WORKING )
         comic = COMICS[row]
         # Read the comic page once and save it, no matter status
+        logging.info('Reading comic %s',comic.name)
         page_text = self.read_url(comic)
         comic.page = page_text
         if 0 == len(page_text) :
             # some problem reading the comic, mark it bad and quit.
             self.statusChanged.emit( row, BADCOMIC )
+            logging.error('problem reading URL %s',comic.url)
             return
 
         # OK, this comic might could be new, so create a hash of the page we
@@ -587,9 +591,11 @@ class WorkerBee ( QThread ) :
         if comic.old_hash != comic.new_hash :
             # The comic's web page has changed since it was displayed.
             self.statusChanged.emit( row, NEWCOMIC )
+            logging.info('%s appears to be unread',comic.name)
         else :
             # It has not changed, hash is the same as last time.
             self.statusChanged.emit( row, OLDCOMIC )
+            logging.info('%s appears to be old',comic.name)
         return
 
     # Given a comic, read the single html page at its url and return the page
