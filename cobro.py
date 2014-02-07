@@ -197,7 +197,8 @@ from PyQt5.QtWebKitWidgets import (
     QWebPage,
     QWebView
 )
-
+import PyQt5.QtNetwork
+import PyQt5.QtPrintSupport
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
@@ -273,10 +274,14 @@ then select File&gt;New Comic, and fill in its name.</p>
 <tr><td>Penny Arcade</td><td>http://www.penny-arcade.com/comic</td></tr>
 <tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td></tr>
 </table>
-<p>That's enough! There are thousands of web comics out there!
-For nationally-syndicated (newspaper) cartoons, try
+<p>That's enough! There are <i>thousands</i> of web comics out there!
+The ones above are of the daily-joke variety, but there are also
+richly-drawn graphic novels and everything in between.
+For U.S. syndicated (newspaper) cartoons, try
 <a href='http://comics.com/'>Comics.com</a> or check the website of your
-regional newspaper under "Entertainment".</p>
+regional newspaper under "Entertainment". For independent comics, try
+<a href='http://thehiveworks.com/'>Hiveworks</a> or <a href='http://new.belfrycomics.net/'>The
+Belfry</a> list.</p>
 <p>To "refresh" a comic means to read its web page and see if it is
 different from the last time. All comics are refreshed when the app starts!</p>
 <ul><li>While we are reading its page, a comic's name is <i>italic</i>.</li>
@@ -452,11 +457,17 @@ class myParser(HTMLParser):
         #  some comics load different gravatars for no obvious reason
         #  Savage Chickens injects random ads from its images directory
         #  Ted Rall ends with a random number on cookies-for-comments
+        #  sheldon inserts a random thumbnail of an old comic and so does
+        #  comics.com, so any image with "thumb" is junk
+        #  assets.amuniversal.com is a random ad image.
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
                             'savagechickens.com/images',
-                            'cookies-for-comments']
+                            'cookies-for-comments',
+                            'thumb',
+                            'assets.amuniversal.com'
+                            ]
     def read_hash(self) :
         return bytes(self.sha1.digest())
     def handle_starttag(self, tag, attrs):
@@ -1157,7 +1168,7 @@ class CobroWebPage(QWebView) :
     def __init__(self, status, bar, parent) :
         global FONTLIST, OLDCOMIC, WELCOME_MSG
         # Initialize the root class, incidentally creating a QWebPage
-        super(CobroWebPage, self).__init__(parent)
+        super().__init__(parent)
         # Save access to the main window (our parent) and
         # separately to its status line and progress bar widgets
         self.main = parent
@@ -1656,6 +1667,8 @@ class theAppWindow(QMainWindow) :
     # -----------------------------------------------------------------
     # reimplement QWidget::closeEvent() to save the current comics.
     def closeEvent(self, event):
+        # make sure the webkit is in a clean state
+        self.page.page().triggerAction(QWebPage.Stop)
         # Save window geometry in settings
         self.settings.setValue("cobro/size",self.size())
         self.settings.setValue("cobro/position", self.pos())
@@ -1681,16 +1694,6 @@ if __name__ == "__main__":
 
     # setup the font globals
     setup_jolly_fonts()
-
-    # Get a valid User Agent string, without which many sites won't talk to us.
-    #
-    # In order to use this feature of a QWebPage, we have to actually create
-    # the object in Python. We can't use the one created automatically as
-    # part of our QWebView that we make later. Now we have an app we can make
-    # a QWebPage (which incurs the whole Webkit startup delay) and throw it away.
-    wpage = QWebPage()
-    USERAGENT = wpage.userAgentForUrl(QUrl(u'http://www.google.com'))
-    wpage = None # toss the webpage
 
     # Set the global default timeout value in a (probably vain) hope
     # of avoiding hangups on slow-loading web pages
@@ -1720,8 +1723,20 @@ if __name__ == "__main__":
         logging.basicConfig( level=lvl, stream=args.logfile )
 
     # Construct the GUI, passing it our Settings object to use for loading.
-    # Display it, and run the app's event handling loop.
     main = theAppWindow(settings)
+
+    # Get a valid User Agent string, without which many sites won't talk to us.
+    # We need an actual QWebPage to do that, and we cannot use the one that
+    # is part of the QWebView that is part of the main window, because it was
+    # not created in Python so we don't have access to its "protected" function.
+    # However the whole webkit initialization overhead is past and we can
+    # quickly make another, use it, and discard it.
+    wpage = QWebPage()
+    USERAGENT = wpage.userAgentForUrl(QUrl(u'http://www.google.com'))
+    wpage = None # toss the webpage
+
+
+    # Display it, and run the app's event handling loop.
     main.show()
     app.exec_()
     # c'est tout!
