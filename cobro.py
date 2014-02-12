@@ -230,7 +230,7 @@ def setup_jolly_fonts():
     # we may or may not get Comic Sans, but something sans-serif
     qf.setStyleHint(QFont.SansSerif)
     # ask for the most appropriate font
-    qf.setFamily(u'Comic Sans')
+    qf.setFamily(u'Comic Sans MS')
     qf.setPointSize(16)
     qf.setWeight(QFont.Normal)
     qf.setStyle(QFont.StyleNormal)
@@ -1180,7 +1180,10 @@ class CobroWebPage(QWebView) :
         self.page().setContentEditable(False)
         # set up the default font TODO IS THIS NEEDED/USEFUL?
         qfi = QFontInfo(FONTLIST[OLDCOMIC])
+        #print('setting fonts to',qfi.family())
         self.settings().setFontFamily(QWebSettings.StandardFont, qfi.family())
+        self.settings().setFontFamily(QWebSettings.SansSerifFont, qfi.family())
+        self.settings().setFontFamily(QWebSettings.SerifFont, 'Palatino')
         self.settings().setFontSize(QWebSettings.DefaultFontSize, 16)
         self.settings().setFontSize(QWebSettings.MinimumFontSize, 6)
         self.settings().setFontSize(QWebSettings.MinimumLogicalFontSize, 6)
