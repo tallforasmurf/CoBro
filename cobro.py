@@ -520,10 +520,11 @@ class WorkerBee ( QThread ) :
     def __init__(self, parent=None):
         # !!! TEMPORARY until Wing 5.0.3
         import os
-        if 'WINGDB_ACTIVE' in os.environ:
-            super().__init__(self, parent)
-        else:
-            super().__init__(parent)
+        #if 'WINGDB_ACTIVE' in os.environ:
+            #super().__init__(self, parent)
+        #else:
+            #super().__init__(parent)
+        super().__init__(parent)
         # save a hasher which will be duplicated for each comic read
         self.hash = hashlib.sha1()
         # save an RE used to detect charset='encoding' or encoding='charset'
@@ -1708,7 +1709,7 @@ if __name__ == "__main__":
     # logging: --level=[INFO|ERROR] --logfile=filepath
     parser = argparse.ArgumentParser()
     parser.add_argument('--level',dest='level',
-                        choices=['INFO','ERROR'],default='ERROR',
+                        choices=['DEBUG', 'INFO','ERROR'],default='ERROR',
                         help='use INFO to see items hashed for each comic')
     parser.add_argument('--logfile',dest='logfile',type=argparse.FileType('w'),
                         help='specify a text file to receive log data in place of stderr',
@@ -1717,9 +1718,8 @@ if __name__ == "__main__":
 
     # Set up simple logging to stderr...
     import logging
-    lvl = logging.ERROR
-    if args.level == 'INFO' :
-        lvl = logging.INFO
+    lvl = {'DEBUG':logging.DEBUG,'INFO':logging.INFO,'ERROR':logging.ERROR}[
+        args.level]
     if args.logfile is None :
         logging.basicConfig( level=lvl )
     else :
@@ -1738,6 +1738,27 @@ if __name__ == "__main__":
     USERAGENT = wpage.userAgentForUrl(QUrl(u'http://www.google.com'))
     wpage = None # toss the webpage
 
+    # Tentative code to explore Qt's qInstallMessageHandler
+    from PyQt5.QtCore import qInstallMessageHandler, QMessageLogContext
+    from PyQt5.Qt import QtMsgType
+
+    def myQtMsgHandler( msg_type, msg_log_context, msg_string ) :
+        # Convert Qt msg type to logging level
+        log_level = [logging.DEBUG,
+                     logging.WARN,
+                     logging.ERROR,
+                     logging.FATAL] [ int(msg_type) ]
+        logging.log(logging.DEBUG,
+                    'Qt context file is '+msg_log_context.file
+                    )
+        logging.log(logging.DEBUG,
+                    'Qt context line and function: {0} {1}'.format(
+                        msg_log_context.line, msg_log_context.function)
+                    )
+        logging.log(log_level, 'Qt message: '+msg_string)
+
+
+    qInstallMessageHandler(myQtMsgHandler)
 
     # Display it, and run the app's event handling loop.
     main.show()
