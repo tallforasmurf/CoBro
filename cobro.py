@@ -261,9 +261,10 @@ def setup_jolly_fonts():
 # The html for the welcome screen shown on startup.
 #
 WELCOME_MSG = '''
-<div style='text-align:center; height:6em; background-color:#444; color:#E0E; border:2px solid black;'>
+<div style='font-family:Comic Sans MS,Comic Sans,sans-serif;'>
+<div style='text-align:center; height:6em; background-color:#666; color:#F0F; border:2px solid black;'>
 <h2>Welcome to CoBro!</h2>
-<p style='font-size:smaller;'>Version 2.0.0 30 Jan 2014</p>
+<p style='font-size:smaller;'>Version 2.0.0 18 March 2014</p>
 </div>
 <p>Single-click a comic name to display its page in this browser.</p>
 <p>No comics in the list? Use File&gt;New Comic
@@ -293,8 +294,8 @@ Belfry</a> list.</p>
 different from the last time. All comics are refreshed when the app starts!</p>
 <ul><li>While we are reading its page, a comic's name is <i>italic</i>.</li>
 <li>After reading, if the comic looks different from the last time you viewed it,
-its name turns <b>bold</b>. (Sometimes this just means a change of
-ad copy or user comments.)</li>
+its name turns <b>bold</b>. (Sometimes this just means a change in
+ad copy, blog post, or user comments.)</li>
 <li>If there was a problem reading it, its name is <strike>lined-out</strike>.
 Click on it to see the error message.</li>
 </ul>
@@ -324,7 +325,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 You can find a copy of the GNU General Public License at:
 <a href='http://www.gnu.org/licenses/'>www.gnu.org/licenses/</a>.</p>
-'''
+</div>'''
 #
 # Text displayed when a page could not be read. {0} is filled with the
 # Comic.error string.
