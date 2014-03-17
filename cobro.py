@@ -525,12 +525,6 @@ class WorkerBee ( QThread ) :
     statusChanged = pyqtSignal(int, int)
 
     def __init__(self, parent=None):
-        # !!! TEMPORARY until Wing 5.0.3
-        import os
-        #if 'WINGDB_ACTIVE' in os.environ:
-            #super().__init__(self, parent)
-        #else:
-            #super().__init__(parent)
         super().__init__(parent)
         # save a hasher which will be duplicated for each comic read
         self.hash = hashlib.sha1()
