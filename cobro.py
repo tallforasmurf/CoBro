@@ -1458,6 +1458,7 @@ class theAppWindow(QMainWindow) :
     # Do refresh-all -- not a menu action but done at startup after load
     # Put the model index of every row into the work queue for the worker thread.
     def refreshAll(self):
+        global work_queue, work_queue_lock, worker_waits
         ixes = self.model.listOfAllComics()
         work_queue_lock.lock()
         for ix in ixes :
@@ -1672,8 +1673,11 @@ class theAppWindow(QMainWindow) :
     # -----------------------------------------------------------------
     # reimplement QWidget::closeEvent() to save the current comics.
     def closeEvent(self, event):
+        global worker_waits
         # make sure the webkit is in a clean state
         self.page.page().triggerAction(QWebPage.Stop)
+        # Tell the worker thread to shut down.
+        self.worker.quit()
         # Save window geometry in settings
         self.settings.setValue("cobro/size",self.size())
         self.settings.setValue("cobro/position", self.pos())
