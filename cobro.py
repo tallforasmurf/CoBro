@@ -187,7 +187,7 @@ from PyQt5.QtCore import (
     QWaitCondition
 )
 from PyQt5.QtGui import (
-    QFont, QFontInfo,
+    QFont, QFontDatabase,
     QKeySequence
 )
 from PyQt5.QtWebKit import (
@@ -224,17 +224,24 @@ USERAGENT = u''
 
 def setup_jolly_fonts():
     global FONTLIST
-
-    qf = QFont()
-    qf.setStyleStrategy(QFont.PreferAntialias+QFont.PreferQuality)
-    # we may or may not get Comic Sans, but something sans-serif
-    qf.setStyleHint(QFont.SansSerif)
-    # ask for the most appropriate font
-    qf.setFamily(u'Comic Sans MS')
+    fdb = QFontDatabase()
+    # Find the first family in the list of known families for
+    # this platform which contains the string "Comic Sans"
+    qf = None
+    for family in fdb.families():
+        if "Comic Sans" in family:
+            qf = fdb.font(family,'NORMAL',16) # get a QFont for it
+            break
+    if qf is None :
+        # get some approximate sans-serif font
+        qf = QFont()
+        qf.setStyleStrategy(QFont.PreferAntialias+QFont.PreferQuality)
+        qf.setStyleHint(QFont.SansSerif)
+        qf.setFamily(u'Comic Sans')
+    # qf is now a valid font of some family
     qf.setPointSize(16)
     qf.setWeight(QFont.Normal)
     qf.setStyle(QFont.StyleNormal)
-    # qf is a QFont based on (probably) Comic Sans:
     # copy it as the old/normal font
     FONTLIST[OLDCOMIC] = QFont(qf)
     # copy it as the new/bold font
@@ -1180,11 +1187,11 @@ class CobroWebPage(QWebView) :
         # make page unmodifiable
         self.page().setContentEditable(False)
         # set up the default font TODO IS THIS NEEDED/USEFUL?
-        qfi = QFontInfo(FONTLIST[OLDCOMIC])
-        #print('setting fonts to',qfi.family())
-        self.settings().setFontFamily(QWebSettings.StandardFont, qfi.family())
-        self.settings().setFontFamily(QWebSettings.SansSerifFont, qfi.family())
-        self.settings().setFontFamily(QWebSettings.SerifFont, 'Palatino')
+        #qfi = QFontInfo(FONTLIST[OLDCOMIC])
+        #logging.info('setting fonts to',qfi.family())
+        #self.settings().setFontFamily(QWebSettings.StandardFont, qfi.family())
+        #self.settings().setFontFamily(QWebSettings.SansSerifFont, qfi.family())
+        #self.settings().setFontFamily(QWebSettings.SerifFont, 'Palatino')
         self.settings().setFontSize(QWebSettings.DefaultFontSize, 16)
         self.settings().setFontSize(QWebSettings.MinimumFontSize, 6)
         self.settings().setFontSize(QWebSettings.MinimumLogicalFontSize, 6)
