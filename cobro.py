@@ -1675,6 +1675,7 @@ class theAppWindow(QMainWindow) :
     # reimplement QWidget::closeEvent() to save the current comics.
     def closeEvent(self, event):
         global worker_waits
+        event.accept()
         # make sure the webkit is in a clean state
         self.page.page().triggerAction(QWebPage.Stop)
         # Tell the worker thread to shut down.
@@ -1683,7 +1684,6 @@ class theAppWindow(QMainWindow) :
         self.settings.setValue("cobro/size",self.size())
         self.settings.setValue("cobro/position", self.pos())
         self.model.save(self.settings)
-        event.accept()
 
 if __name__ == "__main__":
 
@@ -1769,4 +1769,14 @@ if __name__ == "__main__":
     # Display it, and run the app's event handling loop.
     main.show()
     app.exec_()
+    # Now carefully destroy those objects while Python can still
+    # do garbage collection, hopefully to avoid the occasional
+    # SIGSEGV on termination.
+
+    main = None
+    app = None
+    # idle a bit to let garbage be collected
+    from PyQt5.QtTest import QTest
+    QTest.qWait(100)
+
     # c'est tout!
