@@ -1757,12 +1757,11 @@ if __name__ == "__main__":
                      logging.WARN,
                      logging.ERROR,
                      logging.FATAL] [ int(msg_type) ]
-        logging.log(logging.DEBUG,
-                    'Qt context file is '+msg_log_context.file
-                    )
-        logging.log(logging.DEBUG,
-                    'Qt context line and function: {0} {1}'.format(
-                        msg_log_context.line, msg_log_context.function)
+        logging.log(log_level,
+        'Qt context: file {} function {} line {}'.format(
+            '?' if msg_log_context.file is None else msg_log_context.file,
+            '?' if msg_log_context.function is None else msg_log_context.function,
+            msg_log_context.line)
                     )
         logging.log(log_level, 'Qt message: '+msg_string)
 
