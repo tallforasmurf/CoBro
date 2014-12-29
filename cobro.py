@@ -141,6 +141,8 @@ I was a long-time user and from which I've stolen all the ideas herein.
 
 Second to Mark Summerfield for the book "Rapid GUI Development with PyQt"
 which really could be called "be an instant Qt expert in 8 hours of reading."
+
+http://www.mobify.com/blog/http-requests-are-hard/
 '''
 
 import collections # for deque
@@ -279,12 +281,14 @@ then select File&gt;New Comic, and fill in its name.</p>
 <tr><td>Bug Comic</td><td>http://www.bugcomic.com</td></tr>
 <tr><td>PhD Comics</td><td>http://www.phdcomics.com/comics.php</td></tr>
 <tr><td>Megacynics</td><td>http://www.megacynics.com/</td></tr>
-<tr><td>Penny Arcade</td><td>http://www.penny-arcade.com/comic</td></tr>
+<tr><td>Sheldon!</td><td>http://www.sheldoncomics.com/</td></tr>
 <tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td></tr>
 </table>
 <p>That's enough! There are <i>thousands</i> of web comics out there!
-The ones above are of the daily-joke variety, but there are also
-richly-drawn graphic novels and everything in between.
+The ones above are of the daily-joke variety, but there comics at
+every level of style and subject up to the
+richly-drawn graphic novels like <a href='http://www.sssscomic.com/'>Stand Still Stay Silent</a>
+or <a href='http://romanticallyapocalyptic.com/'>Romantically Apocalyptic</a>.
 For U.S. syndicated (newspaper) cartoons, try
 <a href='http://comics.com/'>Comics.com</a> or check the website of your
 regional newspaper under "Entertainment". For independent comics, try
@@ -294,7 +298,7 @@ Belfry</a> list.</p>
 different from the last time. All comics are refreshed when the app starts!</p>
 <ul><li>While we are reading its page, a comic's name is <i>italic</i>.</li>
 <li>After reading, if the comic looks different from the last time you viewed it,
-its name turns <b>bold</b>. (Sometimes this just means a change in
+its name turns <b>bold</b>. (Sometimes this only means a change in
 ad copy, blog post, or user comments.)</li>
 <li>If there was a problem reading it, its name is <strike>lined-out</strike>.
 Click on it to see the error message.</li>
@@ -308,13 +312,14 @@ to edit its name and URL.</p>
 you get a context menu that you can use to copy the link or open it in
 your system default browser.</p>
 <p>When you quit the app, it saves the
-comic definitions in some magic settings place, depending your OS
-(Registry, Library/Preferences, ~/.config).</p>
+comic definitions in some magic settings place
+(Windows: Registry, Mac: Library/Preferences, Linux: ~/.config).</p>
 <p>Use File&gt;Export to write definitions of the selected comics to a UTF-8 text file.
 Use File&gt;Import to read definitions from a UTF-8 text file and add them to the list
 (or to replace them, when the name's the same). For the import file format,
 export one comic and look at that output.</p>
-<p>That's it! Enjoy! Oh wait -- read the license!</p>
+<p>The list font is of course <a href='http://www.sheldoncomics.com/archive/070511.html'>Comic Sans</a>.
+That's it! Enjoy! Oh wait -- read the license!</p>
 <hr /><p>License (GPL-3.0):
 CoBro is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -1587,26 +1592,24 @@ class theAppWindow(QMainWindow) :
         # A non-empty list is ready. Get a file.
         msg = 'Specify a text file to receive Comic definitions'
         # PyQt4/5 returns a tuple of which the first item is the path
-        path = QFileDialog.getSaveFileName( self, msg, self.starting_dir )
-        path = path[0]
+        (path, _) = QFileDialog.getSaveFileName( self, msg, self.starting_dir )
         if 0 == len(path) :
             # user cancelled dialog, or anyway didn't select a file: quit
             return
         # note starting dir for next time
         self.starting_dir = os.path.dirname(path)
         try:
-            fobj = open(ppath, 'w', encoding='UTF-8', errors='ignore')
-        except :
-            return # can't open it? assume the OS has given a message
-        try:
+            fobj = open(path, 'w', encoding='UTF-8', errors='ignore')
             fobj.write(EXPORTBUMF)
             for ix in ix_list :
                 fobj.write(
-                    "'{0}', '{1}''\n".format(
+                    '''"{0}", "{1}"\n'''.format(
                     self.model.data(ix, Qt.DisplayRole),
                     self.model.data(ix, url_role)
                     )
                 )
+        except :
+            return # can't open it? assume the OS has given a message
         finally:
             fobj.close()
 
