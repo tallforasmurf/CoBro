@@ -68,11 +68,11 @@ status: normal for been-displayed, bold for not-yet-displayed, italic for
 being-read, and strikeout for error.
 
 When the user clicks on a comic in the list, the text of that comic's URL
-page is loaded into the web page display with QWebView::setHTML(), where it
-is rendered. The displayed page can be used as in any browser, e.g. the user
-can click on buttons and follow links in the page. Javascript is allowed
-(some comics need it, e.g. the SMBC "red button" does), but java is not.
-Browsing is "private," no cookies or caches are kept.
+page is loaded into the web page display with setHTML(), where it is
+rendered. The displayed page can be used as in any browser, e.g. the user can
+click on buttons and follow links in the page. Javascript is allowed (some
+comics need it, e.g. the SMBC "red button" does), but java is not. Browsing
+is "private," no cookies or caches are kept.
 
 The list supports the following operations:
 
@@ -192,12 +192,10 @@ from PyQt5.QtGui import (
     QFont, QFontDatabase,
     QKeySequence
 )
-from PyQt5.QtWebKit import (
-    QWebSettings
-)
-from PyQt5.QtWebKitWidgets import (
-    QWebPage,
-    QWebView
+from PyQt5.QtWebEngineWidgets import (
+    QWebEngineSettings,
+    QWebEnginePage,
+    QWebEngineView
 )
 import PyQt5.QtNetwork
 import PyQt5.QtPrintSupport
@@ -215,9 +213,10 @@ BADCOMIC = 2 # status when URL couldn't be read (name strikethrough)
 WORKING = 3  # status while reading a url (name in italic)
 # four QFonts ordered by the codes above
 FONTLIST = [None, None, None, None]
-# the user agent string returned from QWebPage::userAgentForUrl(),
-# converted to a python string -- see main code far below.
-USERAGENT = u''
+# A valid user agent string, as returned by whatsmyuseragent.com when visited
+# using a recent Chrome browser. Some webcomics will not talk to us unless we
+# present a valid user agent.
+USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Find out the nearest font to Comic Sans and store four versions of it in
@@ -308,9 +307,7 @@ When all refreshes are finished, you can rearrange the list order
 by dragging and dropping. Double-click a comic
 to edit its name and URL.</p>
 <p>While browsing, use ctl-[ for "back" and ctl-] for "forward"
-(cmd-[ and cmd-] on a mac). If you right-click on a link (mac: ctl-click),
-you get a context menu that you can use to copy the link or open it in
-your system default browser.</p>
+(cmd-[ and cmd-] on a mac).</p>
 <p>When you quit the app, it saves the
 comic definitions in some magic settings place
 (Windows: Registry, Mac: Library/Preferences, Linux: ~/.config).</p>
@@ -1145,7 +1142,7 @@ class CobroListView(QListView) :
         self.displaying = True
         comic = COMICS[index.row()]
         # Tell the web page, whatever it's working on, stop it.
-        self.webview.page().triggerAction(QWebPage.Stop)
+        self.webview.page().triggerAction(QWebEnginePage.Stop)
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
             # i.e., not a bad comic or a working comic
             if len(comic.page) :
@@ -1168,14 +1165,15 @@ class CobroListView(QListView) :
         self.displaying = False
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-# Implement the web page display, based on QWebView with added behaviors.
-# Initialize it with welcome/usage/license message.
+# Implement the web page display, based on QWebEngineView with added
+# behaviors where those are supported by the cruelly truncated abilities of
+# QWebEngine 5.4. Initialize the display with welcome/usage/license message.
 #
 
-class CobroWebPage(QWebView) :
+class CobroWebPage(QWebEngineView) :
     def __init__(self, status, bar, parent) :
         global FONTLIST, OLDCOMIC, WELCOME_MSG
-        # Initialize the root class, incidentally creating a QWebPage
+        # Initialize the root class, incidentally creating a QWebEnginePage
         super().__init__(parent)
         # Save access to the main window (our parent) and
         # separately to its status line and progress bar widgets
@@ -1184,41 +1182,36 @@ class CobroWebPage(QWebView) :
         self.progressBar = bar
         # Set up a flag used while updating status, see startBar, rollBar below
         self.needUrlStatus = False
-        # make page unmodifiable
-        self.page().setContentEditable(False)
-        # set up the default font TODO IS THIS NEEDED/USEFUL?
-        #qfi = QFontInfo(FONTLIST[OLDCOMIC])
+        ## make page unmodifiable
+        #self.page().setContentEditable(False)
         #logging.info('setting fonts to',qfi.family())
         #self.settings().setFontFamily(QWebSettings.StandardFont, qfi.family())
         #self.settings().setFontFamily(QWebSettings.SansSerifFont, qfi.family())
         #self.settings().setFontFamily(QWebSettings.SerifFont, 'Palatino')
-        self.settings().setFontSize(QWebSettings.DefaultFontSize, 16)
-        self.settings().setFontSize(QWebSettings.MinimumFontSize, 6)
-        self.settings().setFontSize(QWebSettings.MinimumLogicalFontSize, 6)
+        self.settings().setFontSize(QWebEngineSettings.DefaultFontSize, 16)
+        self.settings().setFontSize(QWebEngineSettings.MinimumFontSize, 6)
+        self.settings().setFontSize(QWebEngineSettings.MinimumLogicalFontSize, 6)
         # set our zoom factor which is changed by keys ctl-plus/minus
         self.ourZoomFactor = 1.0
-        # We no longer set textSizeMultiplier because doing so forces ON
-        # the setting ZoomTextOnly. Just use zoomFactor.
-        #self.setTextSizeMultiplier(self.ourZoomFactor)
         self.setZoomFactor(self.ourZoomFactor)
         # Disable scripting! Well, actually, quite a few comics need j'script,
         # including (darn it) the SMBC red button!
-        self.settings().setAttribute(QWebSettings.JavascriptEnabled, True)
-        self.settings().setAttribute(QWebSettings.JavaEnabled, False)
+        self.settings().setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        #self.settings().setAttribute(QWebSettings.JavaEnabled, False)
         # Enable plugins since many comic pages use Flash
-        self.settings().setAttribute(QWebSettings.PluginsEnabled, True)
+        #self.settings().setAttribute(QWebSettings.PluginsEnabled, True)
         # Private browsing, don't store crap in the webkit caches
-        self.settings().setAttribute(QWebSettings.PrivateBrowsingEnabled, True)
+        #self.settings().setAttribute(QWebSettings.PrivateBrowsingEnabled, True)
         # Let +/- zoom affect the image which is what we came for
-        self.settings().setAttribute(QWebSettings.ZoomTextOnly, False)
+        #self.settings().setAttribute(QWebSettings.ZoomTextOnly, False)
         # Connect the load progress signals to our slots below.
         self.loadStarted.connect( self.startBar )
         self.loadProgress.connect( self.rollBar )
         self.loadFinished.connect( self.endBar )
-        # Set our Page to "delegate" all links, that is, when a link is clicked do not
-        # follow it but instead raise the linkClicked signal. Connect the signal.
-        self.page().setLinkDelegationPolicy(QWebPage.DelegateExternalLinks)
-        self.linkClicked.connect( self.link_clicked )
+        ## Set our Page to "delegate" all links, that is, when a link is clicked do not
+        ## follow it but instead raise the linkClicked signal. Connect the signal.
+        #self.page().setLinkDelegationPolicy(QWebPage.DelegateExternalLinks)
+        #self.linkClicked.connect( self.link_clicked )
         # Connect the titleChanged signal to our slot.
         self.titleChanged.connect( self.newTitle )
         # Set up constants for key values so as not to bog down the keypress event.
@@ -1268,20 +1261,19 @@ class CobroWebPage(QWebView) :
         if not ok :
             self.statusLine.setText(u"Some error")
 
-    # Slot to receive the linkClicked signal. (In v.1 this was named
-    # "linkClicked" but in PyQt5, signals are class variables, so this method
-    # has to use a different name from the signal.) Stop any ongoing action.
-    # Then complete the link action by calling self.setUrl.
-    def link_clicked(self, url):
-        #print(url.toString()) #dbg
-        self.page().triggerAction(QWebPage.Stop)
-        #self.settings().clearMemoryCaches()
-        self.setUrl(url)
+    ## Slot to receive the linkClicked signal. (In v.1 this was named
+    ## "linkClicked" but in PyQt5, signals are class variables, so this method
+    ## has to use a different name from the signal.) Stop any ongoing action.
+    ## Then complete the link action by calling self.setUrl.
+    #def link_clicked(self, url):
+        ##print(url.toString()) #dbg
+        #self.page().triggerAction(QWebPage.Stop)
+        ##self.settings().clearMemoryCaches()
+        #self.setUrl(url)
 
     # Slot to receive the titleChanged signal. Change the title of the
     # main window to match.
     def newTitle(self, qstitle):
-        #print('new title',qstitle)
         self.main.setWindowTitle(qstitle)
 
     # Re-implement the parent's keyPressEvent in order to provide:
@@ -1324,43 +1316,43 @@ class CobroWebPage(QWebView) :
             event.ignore()
         super().keyPressEvent(event)
 
-    # Re-implement the parent's contextMenuEvent handler to do our own context
-    # menus in certain situations, but not all.
-    def contextMenuEvent (self, cx_event) :
-        main_frame = self.page().mainFrame()
-        hit_test = main_frame.hitTestContent(cx_event.pos())
-        hit_url = hit_test.linkUrl()
-        if not hit_url.isEmpty() :
-            # The right-click (or whatever) was upon a link. In this case we want to
-            # offer a custom context menu with two actions: copy link url and
-            # open link in default browser. Annoyingly, the predefined "copy link" action
-            # provided by pageAction does not use the the global app clipboard. Since
-            # we expect the user to paste a copied link in another app (e.g. browser)
-            # we have to implement the copy action also.
-            cx_event.accept()
-            # First, save the target URL for our actions to use.
-            self.contextUrl = hit_url.toString()
-            # Next, create the custom two-action menu:
-            ctx_menu = QMenu()
-            # Action one is, copy link to clipboard
-            ctx_copy = QAction( u'Copy link to clipboard', self )
-            ctx_copy.triggered.connect( self.copyLinkToClipboard )
-            ctx_menu.addAction(ctx_copy)
-            # Action B is, open in another browser
-            ctx_open = QAction( u'Open in default browser', self )
-            ctx_open.triggered.connect( self.openInDefaultBrowser )
-            ctx_menu.addAction(ctx_open)
-            # Now show the menu.
-            ctx_menu.exec_(cx_event.globalPos())
-        else:
-            # the thing right-clicked was not a link, so, meh.
-            super().contextMenuEvent(cx_event)
-    # Here are the slots for our two context menu actions.
-    # The URL of the clicked link has been saved.
-    def copyLinkToClipboard(self) :
-        QApplication.clipboard().setText(self.contextUrl)
-    def openInDefaultBrowser(self) :
-        webbrowser.open_new(self.contextUrl)
+    ## Re-implement the parent's contextMenuEvent handler to do our own context
+    ## menus in certain situations, but not all.
+    #def contextMenuEvent (self, cx_event) :
+        #main_frame = self.page().mainFrame()
+        #hit_test = main_frame.hitTestContent(cx_event.pos())
+        #hit_url = hit_test.linkUrl()
+        #if not hit_url.isEmpty() :
+            ## The right-click (or whatever) was upon a link. In this case we want to
+            ## offer a custom context menu with two actions: copy link url and
+            ## open link in default browser. Annoyingly, the predefined "copy link" action
+            ## provided by pageAction does not use the the global app clipboard. Since
+            ## we expect the user to paste a copied link in another app (e.g. browser)
+            ## we have to implement the copy action also.
+            #cx_event.accept()
+            ## First, save the target URL for our actions to use.
+            #self.contextUrl = hit_url.toString()
+            ## Next, create the custom two-action menu:
+            #ctx_menu = QMenu()
+            ## Action one is, copy link to clipboard
+            #ctx_copy = QAction( u'Copy link to clipboard', self )
+            #ctx_copy.triggered.connect( self.copyLinkToClipboard )
+            #ctx_menu.addAction(ctx_copy)
+            ## Action B is, open in another browser
+            #ctx_open = QAction( u'Open in default browser', self )
+            #ctx_open.triggered.connect( self.openInDefaultBrowser )
+            #ctx_menu.addAction(ctx_open)
+            ## Now show the menu.
+            #ctx_menu.exec_(cx_event.globalPos())
+        #else:
+            ## the thing right-clicked was not a link, so, meh.
+            #super().contextMenuEvent(cx_event)
+    ## Here are the slots for our two context menu actions.
+    ## The URL of the clicked link has been saved.
+    #def copyLinkToClipboard(self) :
+        #QApplication.clipboard().setText(self.contextUrl)
+    #def openInDefaultBrowser(self) :
+        #webbrowser.open_new(self.contextUrl)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the application window incorporating the list and webview.
@@ -1680,7 +1672,7 @@ class theAppWindow(QMainWindow) :
         global worker_waits
         event.accept()
         # make sure the webkit is in a clean state
-        self.page.page().triggerAction(QWebPage.Stop)
+        self.page.page().triggerAction(QWebEnginePage.Stop)
         # Tell the worker thread to shut down.
         self.worker.quit()
         # Save window geometry in settings
@@ -1734,19 +1726,6 @@ if __name__ == "__main__":
     else :
         logging.basicConfig( level=lvl, stream=args.logfile )
 
-    # Construct the GUI, passing it our Settings object to use for loading.
-    main = theAppWindow(settings)
-
-    # Get a valid User Agent string, without which many sites won't talk to us.
-    # We need an actual QWebPage to do that, and we cannot use the one that
-    # is part of the QWebView that is part of the main window, because it was
-    # not created in Python so we don't have access to its "protected" function.
-    # However the whole webkit initialization overhead is past and we can
-    # quickly make another, use it, and discard it.
-    wpage = QWebPage()
-    USERAGENT = wpage.userAgentForUrl(QUrl(u'http://www.google.com'))
-    wpage = None # toss the webpage
-
     # Tentative code to explore Qt's qInstallMessageHandler
     from PyQt5.QtCore import qInstallMessageHandler, QMessageLogContext
     from PyQt5.Qt import QtMsgType
@@ -1764,17 +1743,17 @@ if __name__ == "__main__":
             msg_log_context.line)
                     )
         logging.log(log_level, 'Qt message: '+msg_string)
-
-
     qInstallMessageHandler(myQtMsgHandler)
 
-    # Display it, and run the app's event handling loop.
+    # Construct the GUI, passing it our Settings object to use for loading.
+    main = theAppWindow(settings)
+
+    # Display our window and run the app's event handling loop.
     main.show()
     app.exec_()
-    # Now carefully destroy those objects while Python can still
-    # do garbage collection, hopefully to avoid the occasional
-    # SIGSEGV on termination.
 
+    # Now carefully destroy those objects while Python can still do garbage
+    # collection, hopefully to avoid the occasional SIGSEGV on termination.
     main = None
     app = None
     # idle a bit to let garbage be collected
