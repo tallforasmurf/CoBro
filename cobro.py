@@ -226,34 +226,33 @@ USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 
 def setup_jolly_fonts():
     global FONTLIST
     fdb = QFontDatabase()
-    # Find the first family in the list of known families for
-    # this platform which contains the string "Comic Sans"
+    # Find the first family in the list of known families for this platform
+    # which contains the string "Comic Sans".
     qf = None
     for family in fdb.families():
         if "Comic Sans" in family:
             qf = fdb.font(family,'NORMAL',16) # get a QFont for it
+            qfb = fdb.font(family,'BOLD',16) # and get a bold copy
             break
     if qf is None :
         # get some approximate sans-serif font
         qf = QFont()
         qf.setStyleStrategy(QFont.PreferAntialias+QFont.PreferQuality)
         qf.setStyleHint(QFont.SansSerif)
-        qf.setFamily(u'Comic Sans')
-    # qf is now a valid font of some family
-    qf.setPointSize(16)
-    qf.setWeight(QFont.Normal)
-    qf.setStyle(QFont.StyleNormal)
+        qf.setFamily(u'Comic Sans') # gets some fallback family
+        qfb = QFont(qf) # make a bold version
+        qfb.setBold(True)
+    # qf and qfb are now valid fonts of some family, likely Comic Sans
     # copy it as the old/normal font
     FONTLIST[OLDCOMIC] = QFont(qf)
     # copy it as the new/bold font
-    FONTLIST[NEWCOMIC] = QFont(qf)
-    FONTLIST[NEWCOMIC].setWeight(QFont.Bold) # ..and make it so
-    # copy as the working/italic font
-    FONTLIST[WORKING] = QFont(qf)
-    FONTLIST[WORKING].setItalic(True) # and make it so
+    FONTLIST[NEWCOMIC] = QFont(qfb)
     # copy as the error/strike font
     FONTLIST[BADCOMIC] = QFont(qf)
     FONTLIST[BADCOMIC].setStrikeOut(True) # and make that true
+    # copy as the working/italic font
+    FONTLIST[WORKING] = QFont(qf)
+    FONTLIST[WORKING].setItalic(True) # and make it so
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Four boiler-plate messages that are pushed into the web page display
@@ -712,8 +711,6 @@ status_role = new_hash_role + 1 # data() request for comic status
 
 class ConcreteListModel ( QAbstractListModel ) :
 
-    bogusSignal = pyqtSignal(QModelIndex,QModelIndex)
-
     # minimal __init__ but see load()
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -794,14 +791,12 @@ class ConcreteListModel ( QAbstractListModel ) :
         if role == status_role : # change the status of a comic
             # status code change results in font change, see data()
             comic.status = variant
-            #print('status {0:03x} on row {1}'.format(variant,index.row()))#dbg
-            #self.dataChanged.emit( index, index )
-            self.bogusSignal.emit(index,index)
+            #print('set',comic.name,comic.status)
+            self.dataChanged.emit( index, index, [role] )
             return True
         elif role == Qt.DisplayRole : # Set a new or changed name
             comic.name = variant # should be Python ustring
-            #self.dataChanged.emit( index, index )
-            self.bogusSignal.emit(index,index)
+            self.dataChanged.emit( index, index, [role] )
             return True
         elif role == url_role :
             # user edited the URL string
@@ -810,8 +805,7 @@ class ConcreteListModel ( QAbstractListModel ) :
             comic.old_hash = b'\x00' # don't know either hash now
             comic.new_hash = b'\x00'
             comic.status = OLDCOMIC # assume not new until refreshed
-            #self.dataChanged.emit( index, index )
-            self.bogusSignal.emit(index,index)
+            self.dataChanged.emit( index, index, [role] )
             return True
         return False # unknown role
 
@@ -1034,15 +1028,16 @@ class ItemDelegate(QStyledItemDelegate):
 #TODO:why drag behavior?
 
 class CobroListView(QListView) :
-    def __init__(self, browser, parent=None):
+    def __init__(self, browser, model, parent):
         super().__init__(parent)
         # Save reference to our browser window for use in itemClicked()
         self.webview = browser
         # flag used to prevent a recursion loop on dataChanged signal!
         self.displaying = False
-        # connect to the concrete model to display
-        #self.setModel(model)
-        #self.model().dataChanged.connect( self.dataChanged )
+        # connect to the concrete model whose contents we display
+        self.setModel(model)
+        # connect the model's dataChanged to our slot for it
+        self.model().dataChanged.connect( self.dataChanged )
         # Set all the many properties of a ListView/AbstractItemView:
         #
         # Uniform item sizes
@@ -1110,7 +1105,7 @@ class CobroListView(QListView) :
     # it should refresh the page display right then, not require another click.
     # If the item being changed is NOT the single current selection, do nothing.
 
-    def dataChanged(self, topLeft, bottomRight ) :
+    def dataChanged(self, topLeft, bottomRight, roles ) :
         if not self.displaying:
             # signal didn't come as a result of itemDisplay below
             top_left_row = topLeft.row()
@@ -1128,8 +1123,8 @@ class CobroListView(QListView) :
                         if comic.status in [NEWCOMIC, BADCOMIC, OLDCOMIC] :
                             # yeah, so update the html display
                             self.itemDisplay(sel_item)
-        # regardless, pass the signal on to the parent
-        super().dataChanged(topLeft, bottomRight)
+        # in all cases, pass the signal on to the parent
+        super().dataChanged(topLeft, bottomRight, roles)
 
     # It is the time to display one item's URL in our web browser. Some
     # things we do here (changing the font) can trigger a dataChanged signal.
@@ -1191,6 +1186,8 @@ class CobroWebPage(QWebEngineView) :
         self.settings().setFontSize(QWebEngineSettings.DefaultFontSize, 16)
         self.settings().setFontSize(QWebEngineSettings.MinimumFontSize, 6)
         self.settings().setFontSize(QWebEngineSettings.MinimumLogicalFontSize, 6)
+        # set focus policy so we get keypress events
+        self.setFocusPolicy(Qt.StrongFocus)
         # set our zoom factor which is changed by keys ctl-plus/minus
         self.ourZoomFactor = 1.0
         self.setZoomFactor(self.ourZoomFactor)
@@ -1290,6 +1287,7 @@ class CobroWebPage(QWebEngineView) :
     def keyPressEvent(self, event):
         global WELCOME_MSG
         kkey = int( int(event.modifiers()) & self.keypadDeModifier) | int(event.key() )
+        #print(kkey)#dbg
         if (kkey in self.zoomKeys) : # ctrl-plus/minus
             event.accept()
             zfactor = 0.0625 # zoom in
@@ -1299,6 +1297,7 @@ class CobroWebPage(QWebEngineView) :
             if (zfactor > 0.374) and (zfactor < 4.0) :
                 self.ourZoomFactor = zfactor
                 self.setZoomFactor(self.ourZoomFactor)
+                #print('zoom',zfactor)#dbg
         elif (kkey in self.backKeys) :
             event.accept()
             if self.page().history().canGoBack() :
@@ -1383,16 +1382,12 @@ class theAppWindow(QMainWindow) :
         self.progressBar.setRange(0,100)
         self.progressBar.setOrientation ( Qt.Horizontal)
         self.progressBar.setTextVisible(False)
-        # Create the webrowser: a WebPage in a WebView. The web view needs
+        # Create the webrowser: a WebEngineView. The web view needs
         # access to the progress and status bars so it can update them.
         self.page = CobroWebPage(self.statusLine, self.progressBar, self)
         # Create the List View, which needs access to the web view
-        # (to display a comic)
-        self.view =  CobroListView(self.page)
-        # Connect the model's dataChanged signal to the view's dataChanged slot
-        self.view.setModel(self.model)
-        #self.model.dataChanged.connect(self.view.dataChanged)
-        self.model.bogusSignal.connect(self.view.dataChanged)
+        # (to display a comic), and to the list model.
+        self.view =  CobroListView(self.page, self.model, self)
         # Lay out our widget: the list on the left and webview on the right,
         # underneath it a status line and a progress bar.
         hb = QHBoxLayout() # hbox with list and webview
