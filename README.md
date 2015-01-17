@@ -104,35 +104,35 @@ of cookies and other detritus may remain in one's Chrome browser history.
 
 <del>The browser pane is a QWebView widget, a fully functional
 browser based on WebKit. When the app starts up, a welcome
-message with how-to-use text is displayed.
+message with how-to-use text is displayed.</del>
 
-The QWebview is configured to disable java
+<del>The QWebview is configured to disable java
 but to permit javascript and plug-ins, because
-some comics require scripts and Flash.
+some comics require scripts and Flash.</del>
 
-When the user clicks on a comic name in the list,
+<del>When the user clicks on a comic name in the list,
 the contents read from its URL are passed
 to the QWebView for rendering.
 If there was an error reading the comic, an
-explanatory error message is displayed instead.
+explanatory error message is displayed instead.</del>
 
-Rendering may take time if the comic links to numerous ads and images,
-so a progress bar is displayed.
+<del>Rendering may take time if the comic links to numerous ads and images,
+so a progress bar is displayed.</del>
 
-The following keystrokes are implemented:
+<del>The following keystrokes are implemented:</del>
 
-* Browser "back" on ctl/cmd-left, ctl/cmd-b, ctl/cmd-[
+<del>* Browser "back" on ctl/cmd-left, ctl/cmd-b, ctl/cmd-[</del>
 
-* Browser "forward" on ctl/cmd-right, ctl/cmd-]
+<del>* Browser "forward" on ctl/cmd-right, ctl/cmd-]</del>
 
-* Font size zoom on ctl/cmd-plus, ctl/cmd-minus
+<del>* Font size zoom on ctl/cmd-plus, ctl/cmd-minus</del>
 
-* Copy selected text to clipboard on ctl/cmd-c
+<del>* Copy selected text to clipboard on ctl/cmd-c</del>
 
-Using a "back" key from the first page of a comic brings back
-the display of the welcome message.
+<del>Using a "back" key from the first page of a comic brings back
+the display of the welcome message.</del>
 
-The user can ctl/cmd-click on any link to bring up a context menu
+<del>The user can ctl/cmd-click on any link to bring up a context menu
 with the options "Copy link to clipboard" and "Open link in
 default browser". This allows an easy escape for
 example to bring up the Archives or About link of a comic
