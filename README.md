@@ -25,22 +25,16 @@ so it can't be forked and tinkered-with.
 Most important, Comictastic is a web scraper:
 it fetches only the image of the comic and doesn't render
 any more of the comic's web page.
-That's a drawback;
+That means
 the comic artist loses out on visitor counts and ad revenue,
 and the user loses out on features
 like the Red Button at SMBC,
 or the title text that pops up when hovering the XKCD image,
-or the nav. links previous/next/first, About or Cast.
+or the typical links like previous/next/first/about.
 
-Comics Need a Specialty Browser
--------------------
-
-I thought a long time about writing a better comic scraper,
-but concluded that the right way to read web comics is to use a browser
+These problems are avoided if we use a browser
 to render the whole page.
-
-However, a general-purpose browser is not
-a good way to read comics because it lacks the three
+However, a general-purpose browser lacks the three
 best features of Comictastic:
 
 * A list of names that can be clicked to show a comic instantly;
@@ -50,29 +44,23 @@ best features of Comictastic:
 * Comic names in bold to show an unread episode.
 
 Also I don't want to mix 20+ comic bookmarks with all my
-other browser bookmarks. An RSS reader works, but not all comics
-have RSS feeds, and it is possible to read with even fewer
+other browser bookmarks. An RSS reader might be an option
+but not all comics have RSS feeds,
+and it is possible to read with even fewer
 clicks in a special-purpose app.
 
-So: A very simple web browser designed just for
-reading web comics. Qt via PyQt has the materials to build this.
-
-THE SPEC
-========
-
-CoBro (Comics Browser) is a simple app written in Python 3.3,
-PyQt5 and Qt5.2.
-
-CoBro provides a single window containing
+So: CoBro (Comics Browser)
+providing a single window containing
 a scrolling list of comic names on the left
-and a QWebView (browser) pane on the right.
+and a web browser pane on the right.
+Cobro is written in Python 3.4, PyQt5.4 and Qt5.4.
 
 The List
 --------
 
-The list of names supports multi-selection (shift-click, ctl-click)
-and can be
-reordered by dragging.
+The list of comic names supports multi-selection
+(shift-click, ctl-click)
+and can be reordered by dragging.
 The font style of each name indicates that comic's status:
 
 * Normal: comic available but its contents are unchanged from
@@ -105,11 +93,11 @@ browser used in the first version displayed many annoying bugs that
 were not possible to work around.
 
 However because QWebEngine is in an early state, all of the following
-features that were possible with QWebKit are no longer offered.
-There is no support for any keystrokes nor for a custom context menu.
+features that were possible with QWebKit can no longer be offered.
+There is no support for any keystrokes or a custom context menu.
 There is no restriction on Java, and browsing
 is not "private" i.e. the residue of one's comic reading in the form
-of cookies and other detritus may remain in one's Chrome browser history.
+of cookies and other detritus may remain on one's computer.
 
 <del>The browser pane is a QWebView widget, a fully functional
 browser based on WebKit. When the app starts up, a welcome
@@ -165,6 +153,7 @@ Stored Data
 -----------
 
 With each name is associated these data:
+
 * the comic's URL, e.g. "http://www.gocomics.com/stonesoup"
 
 * an SHA-1 hash based on the last-read page of this comic
@@ -198,11 +187,6 @@ and return.
 * Save the text of the web page in memory for display
 if the user clicks the comic.
 
-* If update days are known for this comic,
-_and_ if this is not an update day,
-_and_ an update day has not elapsed since the comic was last read:
-set Old status and return.
-
 * Compute a hash based on selected elements of 
 the page and compare to the prior hash.
 
@@ -212,8 +196,7 @@ else Old status (normal font).
 Because refresh is in a separate thread, the user
 can display and read comics while others are being refreshed.
 The user can begin reading comics as soon as the first comic 
-in the list has changed from Working (italic) font to normal
-or bold font.
+in the list has changed from Working status (italic font).
 
 Shutdown Operation
 ------------------
