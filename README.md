@@ -90,7 +90,16 @@ Double-clicking a name opens a dialog to edit the name and URL.
 The Browser
 -----------
 
-The browser pane is a QWebEngineView widget, a fully-functional
+When the user clicks on a comic name in the list,
+the contents read from its URL are passed
+to the browser panel for rendering.
+If there was an error reading the comic, an
+explanatory error message is displayed instead.
+
+Rendering may take time if the comic links to numerous ads and images,
+so a progress bar is displayed.
+
+The browser panel is a QWebEngineView widget, a fully-functional
 browser first available in Qt5.4. This is used because the QWebKit
 browser used in the first version displayed many annoying bugs that
 were not possible to work around.
@@ -109,15 +118,6 @@ message with how-to-use text is displayed.</del>
 <del>The QWebview is configured to disable java
 but to permit javascript and plug-ins, because
 some comics require scripts and Flash.</del>
-
-<del>When the user clicks on a comic name in the list,
-the contents read from its URL are passed
-to the QWebView for rendering.
-If there was an error reading the comic, an
-explanatory error message is displayed instead.</del>
-
-<del>Rendering may take time if the comic links to numerous ads and images,
-so a progress bar is displayed.</del>
 
 <del>The following keystrokes are implemented:</del>
 
