@@ -90,7 +90,19 @@ Double-clicking a name opens a dialog to edit the name and URL.
 The Browser
 -----------
 
-The browser pane is a QWebView widget, a fully functional
+The browser pane is a QWebEngineView widget, a fully-functional
+browser first available in Qt5.4. This is used because the QWebKit
+browser used in the first version displayed many annoying bugs that
+were not possible to work around.
+
+However because QWebEngine is in an early state, all of the following
+features that were possible with QWebKit are no longer offered.
+There is no support for any keystrokes nor for a custom context menu.
+There is no restriction on Java, and browsing
+is not "private" i.e. the residue of one's comic reading in the form
+of cookies and other detritus may remain in one's Chrome browser history.
+
+<del>The browser pane is a QWebView widget, a fully functional
 browser based on WebKit. When the app starts up, a welcome
 message with how-to-use text is displayed.
 
@@ -124,7 +136,7 @@ The user can ctl/cmd-click on any link to bring up a context menu
 with the options "Copy link to clipboard" and "Open link in
 default browser". This allows an easy escape for
 example to bring up the Archives or About link of a comic
-in a "real" browser.
+in a "real" browser.</del>
 
 File Menu
 ---------
