@@ -178,6 +178,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import (
     pyqtSignal,
     QAbstractListModel,
+    QByteArray,
     QModelIndex,
     QMutex,
     QPoint,
@@ -469,13 +470,15 @@ class myParser(HTMLParser):
         #  sheldon inserts a random thumbnail of an old comic and so does
         #  comics.com, so any image with "thumb" is junk
         #  assets.amuniversal.com is a random ad image.
+        #  Tumblr based comics have random values in lines with "impixu?"
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
                             'savagechickens.com/images',
                             'cookies-for-comments',
                             'thumb',
-                            'assets.amuniversal.com'
+                            'assets.amuniversal.com',
+                            'impixu?'
                             ]
     def read_hash(self) :
         return bytes(self.sha1.digest())
@@ -919,7 +922,7 @@ class ConcreteListModel ( QAbstractListModel ) :
             settings.setArrayIndex(i)
             settings.setValue(u'name', COMICS[i].name)
             settings.setValue(u'url', COMICS[i].url)
-            settings.setValue(u'old_hash', COMICS[i].old_hash)
+            settings.setValue(u'old_hash', QByteArray(COMICS[i].old_hash))
         settings.endArray()
         settings.endGroup()
         settings.sync() # not supposed to be needed but does no harm
