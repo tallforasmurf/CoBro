@@ -154,6 +154,7 @@ import re # regular expressions
 import os # getcwd
 import io # stringIO
 from html.parser import HTMLParser # see MyParser below
+#from HTMLParser import HTMLParser #P2
 
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -161,6 +162,7 @@ from PyQt5.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
+    QErrorMessage,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -455,7 +457,7 @@ COMICS = [] # list of Comic objects
 # eliminated many but not all false positives>
 #
 
-class myParser(HTMLParser):
+class MyParser(HTMLParser):
     def __init__(self, sha1) :
         HTMLParser.__init__(self)
         self.sha1 = sha1
@@ -471,6 +473,9 @@ class myParser(HTMLParser):
         #  comics.com, so any image with "thumb" is junk
         #  assets.amuniversal.com is a random ad image.
         #  Tumblr based comics have random values in lines with "impixu?"
+        #  Gregor and others have rotating ads from project wonderful
+        #  Gregor sometimes has a "data: image/png..." monster string
+        #  SMBC has a rotating ad under SMBC-hivemill
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
@@ -478,7 +483,10 @@ class myParser(HTMLParser):
                             'cookies-for-comments',
                             'thumb',
                             'assets.amuniversal.com',
-                            'impixu?'
+                            'impixu?',
+                            'projectwonderful.com',
+                            'SMBC-hivemill',
+                            'data: '
                             ]
     def read_hash(self) :
         return bytes(self.sha1.digest())
@@ -530,7 +538,7 @@ class WorkerBee ( QThread ) :
     statusChanged = pyqtSignal(int, int)
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super(QThread,self).__init__(parent)
         # save a hasher which will be duplicated for each comic read
         self.hash = hashlib.sha1()
         # save an RE used to detect charset='encoding' or encoding='charset'
@@ -578,7 +586,7 @@ class WorkerBee ( QThread ) :
         comic = COMICS[row]
         # Read the comic page once and save it, no matter status
         logging.info('Reading comic %s',comic.name)
-        page_text = self.read_url(comic)
+        page_text = self.read_url(comic) # TODO bytes or string??
         comic.page = page_text
         if 0 == len(page_text) :
             # some problem reading the comic, mark it bad and quit.
@@ -588,11 +596,12 @@ class WorkerBee ( QThread ) :
 
         # OK, this comic might could be new, so create a hash of the page we
         # read and see if it is different from the prior hash. See the
-        # myParser class above for how we build a signature.
+        # MyParser class above for how we build a signature.
 
-        # print('checking',comic.name) # dbg display hash texts
+        # print('checking',comic.name) # TODO MAKE logging.debug
         # Create an HTML parser and feed it the page, line by line
-        parsnip = myParser(self.hash.copy())
+        # TODO MAKE SURE THIS IS AN UNINITIALIZED HASH
+        parsnip = MyParser(self.hash.copy())
         page_as_file = io.StringIO(page_text)
         line = page_as_file.readline()
         while 0 < len(line):
@@ -623,6 +632,7 @@ class WorkerBee ( QThread ) :
         global URLTIMEOUT, USERAGENT
         if 0 == len(comic.url.strip()) : # URL is a null or empty string
             return u'' # couldn't read that
+        # TODO change the following so furl is always closed
         try:
             # Create an http "request" object for the URL
             ureq = urllib.request.Request(comic.url)
@@ -631,10 +641,11 @@ class WorkerBee ( QThread ) :
             ureq.add_header('User-agent', USERAGENT)
             # Blog-based sites reject us with 403 unless we have this:
             ureq.add_header('Accept', 'text/html')
-            #print('opening', comic.url) # dbg
+            #print('opening', comic.url) # TODO make logging.debug
             # Execute the request by opening it, creating a "file" to the page.
             # Use a timeout to avoid hang-like conditions on slow sites.
             furl = urllib.request.urlopen(ureq,None,URLTIMEOUT)
+            # TODO change the following to log every error
         except urllib.error.HTTPError as ugh :
             comic.error = 'URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.reason)
             return u''
@@ -711,12 +722,12 @@ page_role = url_role + 1 # data() request for page content string
 old_hash_role = page_role + 1 # data() request for old hash
 new_hash_role = old_hash_role + 1 # data() request for new hash
 status_role = new_hash_role + 1 # data() request for comic status
-
+# TODO KILL P2 SUPERS
 class ConcreteListModel ( QAbstractListModel ) :
 
     # minimal __init__ but see load()
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super(QAbstractListModel,self).__init__(parent) #P2
 
     # Here we implement the methods of QAbstractListModel class that convert
     # this from an abstract list to a concrete one. First up, flags which
@@ -918,30 +929,46 @@ class ConcreteListModel ( QAbstractListModel ) :
         settings.sync() # not supposed to be needed but does no harm
         settings.beginGroup(u'comiclist')
         settings.beginWriteArray(u'comics')
-        for i in range(len(COMICS)) :
+        for i, comic in enumerate(COMICS) :
             settings.setArrayIndex(i)
-            settings.setValue(u'name', COMICS[i].name)
-            settings.setValue(u'url', COMICS[i].url)
-            settings.setValue(u'old_hash', QByteArray(COMICS[i].old_hash))
+            settings.setValue( u'name', comic.name)
+            settings.setValue( u'url', comic.url)
+            settings.setValue( u'old_hash', QByteArray( bytes(comic.old_hash) ) )
         settings.endArray()
         settings.endGroup()
         settings.sync() # not supposed to be needed but does no harm
+        #print('saved',i,'comics') # dbg
 
     # Load the comics list from the saved settings, see save() above.
     # Since this completely loads the data model, inform the view that
     # things are changing/have changed.
+    #
+    # Under vague circumstances PyQt5 reports a problem converting some
+    # QVariant to Python type. Trap these errors. If it is the hash,
+    # provide a harmless default, the comic will appear to be unread.
+    # If the name or URL, give a message and skip the comic.
+
     def load(self, settings) :
         global COMICS, Comic, OLDCOMIC
         self.beginResetModel()
         settings.beginGroup(u'comiclist')
         count = settings.beginReadArray(u'comics')
         for i in range(count) :
-            settings.setArrayIndex(i)
-            name = settings.value(u'name')
-            url = settings.value(u'url')
-            old_hash = settings.value(u'old_hash')
-            comic = Comic(name,url,old_hash,OLDCOMIC)
-            COMICS.append(comic)
+            name = '?'
+            url = '?'
+            old_hash = b'\xde\xad\xbe\xef'
+            try:
+                settings.setArrayIndex(i)
+                name = settings.value(u'name')
+                url = settings.value(u'url')
+                try:
+                    old_hash = settings.value(u'old_hash')
+                except:
+                    logging.INFO('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
+                comic = Comic(name,url,old_hash,OLDCOMIC)
+                COMICS.append(comic)
+            except:
+                logging.ERROR('error reading comic {0}:{1}, comic skipped'.format(i,name))
         settings.endArray()
         settings.endGroup()
         self.endResetModel()
@@ -966,7 +993,7 @@ class ConcreteListModel ( QAbstractListModel ) :
 
 class EditWidget(QWidget) :
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super(QWidget,self).__init__(parent)#P2
         self.nameEdit = QLineEdit()
         self.urlEdit = QLineEdit()
         hb1 = QHBoxLayout()
@@ -995,7 +1022,7 @@ class EditWidget(QWidget) :
 class ItemDelegate(QStyledItemDelegate):
     # minimal init lets parent do its thing if any
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super(QStyledItemDelegate,self).__init__(parent)#P2
 
     # Create the editing widget with empty data
     def createEditor(self, parent, style, index):
@@ -1032,7 +1059,7 @@ class ItemDelegate(QStyledItemDelegate):
 
 class CobroListView(QListView) :
     def __init__(self, browser, model, parent):
-        super().__init__(parent)
+        super(QListView,self).__init__(parent)#P2
         # Save reference to our browser window for use in itemClicked()
         self.webview = browser
         # flag used to prevent a recursion loop on dataChanged signal!
@@ -1127,7 +1154,7 @@ class CobroListView(QListView) :
                             # yeah, so update the html display
                             self.itemDisplay(sel_item)
         # in all cases, pass the signal on to the parent
-        super().dataChanged(topLeft, bottomRight, roles)
+        super(QListView,self).dataChanged(topLeft, bottomRight, roles)
 
     # It is the time to display one item's URL in our web browser. Some
     # things we do here (changing the font) can trigger a dataChanged signal.
@@ -1143,7 +1170,7 @@ class CobroListView(QListView) :
         self.webview.page().triggerAction(QWebEnginePage.Stop)
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
             # i.e., not a bad comic or a working comic
-            if len(comic.page) :
+            if comic.page :
                 # Pass the current page data into our web viewer.
                 self.webview.setHtml( comic.page, QUrl(comic.url) )
                 # set the font to show it has been seen.
@@ -1172,7 +1199,7 @@ class CobroWebPage(QWebEngineView) :
     def __init__(self, status, bar, parent) :
         global FONTLIST, OLDCOMIC, WELCOME_MSG
         # Initialize the root class, incidentally creating a QWebEnginePage
-        super().__init__(parent)
+        super(QWebEngineView,self).__init__(parent)
         # Save access to the main window (our parent) and
         # separately to its status line and progress bar widgets
         self.main = parent
@@ -1316,7 +1343,7 @@ class CobroWebPage(QWebEngineView) :
             QApplication.clipboard().setText(self.selectedText())
         else: # not a key we support, so,
             event.ignore()
-        super().keyPressEvent(event)
+        super(QWebEngineView,self).keyPressEvent(event)
 
     ## Re-implement the parent's contextMenuEvent handler to do our own context
     ## menus in certain situations, but not all.
@@ -1358,15 +1385,15 @@ class CobroWebPage(QWebEngineView) :
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the application window incorporating the list and webview.
-# The one class of this object also catches shut-down.
+# The one instance of this object also catches shut-down.
 #
 # In order to have a standard menu bar we have to use QMainWindow.
 # That class requires us to supply the real window contents as a widget
 # (not just a layout) so we create that widget first.
 #
-class theAppWindow(QMainWindow) :
+class TheAppWindow(QMainWindow) :
     def __init__(self, settings, parent=None) :
-        super().__init__(parent)
+        super(QMainWindow,self).__init__(parent) #P2
         # Save the settings instance for use at shutdown (see below)
         self.settings = settings
         # Here store the last-used directory to start file selection dialogs
@@ -1494,7 +1521,7 @@ class theAppWindow(QMainWindow) :
         edwig = EditWidget()
         # Get the global clipboard text as a python string.
         clip = QApplication.clipboard().text()
-        if len(clip) :
+        if clip :
             # There is some text on the clipboard, does it look like a URL?
             if re.match(u'http://',clip,re.I) :
                 # oh yeah. Stuff that puppy into the dialog's URL slot
@@ -1598,8 +1625,18 @@ class theAppWindow(QMainWindow) :
                     self.model.data(ix, url_role)
                     )
                 )
-        except :
-            return # can't open it? assume the OS has given a message
+        except OSError as E : # IOError == OSError
+            QErrorMessage.showMessage(
+                "Error '{0}' writing {1}".format( E.strerror, path )
+                )
+        except UnicodeError as E :
+            QErrorMessage.showMessage(
+                "Unicode error '{0}' writing {1}".format( E.reason, path )
+                )
+        except Exception as E :
+            QErrorMessage.showMessage(
+                "{0} writing {1}".format( E.__repr__(), path )
+                )
         finally:
             fobj.close()
 
@@ -1635,12 +1672,20 @@ class theAppWindow(QMainWindow) :
         self.starting_dir = os.path.dirname(path) # note starting dir for next time
         try:
             fobj = open(path,'r',encoding='UTF-8',errors='ignore')
-        except:
-            return # can't open the file? screw it.
+        except OSError as E : # IOError == OSError
+            QErrorMessage.showMessage(
+                "Error '{0}' opening {1}".format( E.strerror, path )
+                )
+            return
+        except Exception as E :
+            QErrorMessage.showMessage(
+                "{0} opening {1}".format( E.__repr__(), path )
+                )
+            return
         self.view.clearSelection()
         try:
             line = fobj.readline()
-            while len(line) :
+            while line :
                 line_match = line_test.match(line)
                 if line_match is not None:
                     # we have a comic definition line, get its parts.
@@ -1661,6 +1706,14 @@ class theAppWindow(QMainWindow) :
                     self.model.setData( ix, line_name, Qt.DisplayRole )
                     self.model.setData( ix, line_url, url_role )
                 line = fobj.readline()
+        except OSError as E : # IOError == OSError
+            QErrorMessage.showMessage(
+                "Error '{0}' reading {1}\nSome comics may have been read.".format( E.strerror, path )
+                )
+        except Exception as E :
+            QErrorMessage.showMessage(
+                "{0} reading {1}\nSome comics may have been read.".format( E.__repr__(), path )
+                )
         finally:
             fobj.close()
 
@@ -1678,6 +1731,9 @@ class theAppWindow(QMainWindow) :
         self.settings.setValue("cobro/position", self.pos())
         self.model.save(self.settings)
 
+# Keep a global reference to the app object until final, final end
+APP = None
+
 if __name__ == "__main__":
 
     import sys # for argv
@@ -1685,13 +1741,13 @@ if __name__ == "__main__":
     import argparse
 
     # Create the App so all the other Qt stuff will work
-    app = QApplication(sys.argv)
+    APP = QApplication(sys.argv)
     # Set up the parameters of our QSettings, in which the comics
     # we know about are stored.
-    app.setOrganizationName("Tassosoft")
-    app.setOrganizationDomain("tassos-oak.com")
-    app.setApplicationName("Cobro")
-    app.setApplicationVersion("2.0")
+    APP.setOrganizationName("Tassosoft")
+    APP.setOrganizationDomain("tassos-oak.com")
+    APP.setApplicationName("Cobro")
+    APP.setApplicationVersion("2.0")
     # Create the settings object to use in accessing the settings
     settings = QSettings()
 
@@ -1735,7 +1791,7 @@ if __name__ == "__main__":
                      logging.ERROR,
                      logging.FATAL] [ int(msg_type) ]
         logging.log(log_level,
-        'Qt context: file {} function {} line {}'.format(
+        'Qt context: file {0} function {1} line {2}'.format(
             '?' if msg_log_context.file is None else msg_log_context.file,
             '?' if msg_log_context.function is None else msg_log_context.function,
             msg_log_context.line)
@@ -1744,18 +1800,14 @@ if __name__ == "__main__":
     qInstallMessageHandler(myQtMsgHandler)
 
     # Construct the GUI, passing it our Settings object to use for loading.
-    main = theAppWindow(settings)
+    main = TheAppWindow(settings)
 
     # Display our window and run the app's event handling loop.
     main.show()
-    app.exec_()
+    APP.exec_()
 
     # Now carefully destroy those objects while Python can still do garbage
     # collection, hopefully to avoid the occasional SIGSEGV on termination.
-    main = None
-    app = None
-    # idle a bit to let garbage be collected
-    from PyQt5.QtTest import QTest
-    QTest.qWait(100)
-
+    del(main)
+    del(APP)
     # c'est tout!
