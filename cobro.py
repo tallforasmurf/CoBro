@@ -38,41 +38,41 @@ Associated with each comic in the list are these persistent items:
   * an SHA-1 hash based on the contents of the page at the URL, as it
     was when the comic was last displayed to the user
 
-These items are saved at shutdown and reloaded at startup.
+These three items are saved in the app Settings at shutdown and reloaded at startup.
 
-Also associated with each comic but created dynamically as the program runs:
+Three other items are associated with each comic, but are created dynamically
+as the program runs:
 
   * the contents of the page at the comic URL
 
   * an SHA-1 hash based on the contents of the page at the URL, as it
-    was read now, since the program started up.
+    was when read most recently.
 
   * a status, one of:
 
-     - comic has not been displayed since it was read (NEWCOMIC)
+     - NEWCOMIC: comic has not been displayed since it was read,
        i.e., the saved hash is not equal to the new hash.
 
-     - comic has been read and displayed to the user (OLDCOMIC)
+     - OLDCOMIC: comic has been read and displayed to the user,
        i.e. the saved and latest hash values are the same
 
-     - comic page is being read from its URL (WORKING)
+     - WORKING: comic page is being read from its URL.
 
-     - error on http request or load, no data (BADCOMIC)
+     - BADCOMIC: error on http request or load, no data
 
 All these data are maintained in memory as a list of Comic objects. The list
 is displayed to the user using the Qt model/view classes: The model is the
 Python list of Comic objects; a QListView derivative displays the list.
 
 The comic names in the list are shown in different fonts to reflect the
-status: normal for been-displayed, bold for not-yet-displayed, italic for
-being-read, and strikeout for error.
+status: normal for OLDCOMIC, bold for NEWCOMIC, italic for WORKING
+and strikeout for BADCOMIC.
 
-When the user clicks on a comic in the list, the text of that comic's URL
-page is loaded into the web page display with setHTML(), where it is
-rendered. The displayed page can be used as in any browser, e.g. the user can
-click on buttons and follow links in the page. Javascript is allowed (some
-comics need it, e.g. the SMBC "red button" does), but java is not. Browsing
-is "private," no cookies or caches are kept.
+When the user clicks on a comic in the list, the text of that comic's page,
+as last read, is loaded into the web page display with setHTML(), where it
+is rendered. The displayed page can be used as in any browser, e.g. the
+user can click on buttons and follow links in the page. See the class
+CobroWebPage for details of browser initialization and options.
 
 The list supports the following operations:
 
@@ -99,12 +99,23 @@ There is a single menu, the File menu, with these commands:
   * Quit
         Save the persistent comic values in QSettings and terminate.
 
+  * Export
+        Present a file-save dialog to choose a filename and destination.
+        Export a text file containing the names and URLs of all
+        selected comics, or all comics when none are selected.
+
+  * Import
+        Present a file-open dialog to choose a text file. Read the file
+        and add any comics defined in it, based on the format written
+        by the Export command. If a comic of the same name exists in
+        the list already, it is replaced.
+
 Refresh operation:
 
 When the app loads, or when File>Refresh is chosen, or when the URL of a
 comic is edited, the app pushes the model index of all, or selected, or the
 edited Comic onto a queue and triggers a QSemaphore. A separate QThread waits
-on the semaphore. While there is work on the queue it
+on the semaphore. While there is work on the queue this thread:
 
 * pops the next model index qmi from the queue and:
 
@@ -125,12 +136,12 @@ on the semaphore. While there is work on the queue it
   it signals statusChanged(qmi, NEWCOMIC)
 
 The statusChanged signal goes to a slot in the list model which updates the
-status of the item and calls dataChanged(), with the result that the list view
-will call data() for new display data -- resulting in a change of font in
-the displayed name of the comic.
+status of the item and calls dataChanged(), with the result that the list
+view will call data() for new display data -- resulting in a change of font
+in the displayed name of the comic.
 
 In this way, shortly after launching, the user has a list of comics ready
-to be read, with the ones yet-unseen in bold.
+to be read, with the ones not yet read, in bold.
 '''
 
 '''
@@ -142,19 +153,22 @@ I was a long-time user and from which I've stolen all the ideas herein.
 Second to Mark Summerfield for the book "Rapid GUI Development with PyQt"
 which really could be called "be an instant Qt expert in 8 hours of reading."
 
+Third to Phil of Riverbank computing for creating PyQt.
+
+Finally to John Boxall for the helpful guide to handling HTTP errors,
 http://www.mobify.com/blog/http-requests-are-hard/
+
 '''
 
 import collections # for deque
 import hashlib # for sha-1
 import urllib.request # for reading URLs, eh?
 import urllib.error # for except statements
-import webbrowser # for platform-independent access to system default browser
+# import webbrowser # for platform-independent access to system default browser
 import re # regular expressions
 import os # getcwd
 import io # stringIO
 from html.parser import HTMLParser # see MyParser below
-#from HTMLParser import HTMLParser #P2
 
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -205,30 +219,40 @@ import PyQt5.QtPrintSupport
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
-# some global constants
+# Define some global constants
 #
+
 URLTIMEOUT = 8 # timeout in seconds for urllib.urlopen
 GLOBALTIMEOUT = 10.0 # socket.setdefaulttimeout value
+
 # The status values of a comic.
+
 OLDCOMIC = 0 # status of previously-seen comic
 NEWCOMIC = 1 # status of an un-viewed comic (name in bold)
 BADCOMIC = 2 # status when URL couldn't be read (name strikethrough)
 WORKING = 3  # status while reading a url (name in italic)
-# four QFonts ordered by the codes above
+
+# List of four QFonts, ordered by the codes above
+
 FONTLIST = [None, None, None, None]
+
 # A valid user agent string, as returned by whatsmyuseragent.com when visited
 # using a recent Chrome browser. Some webcomics will not talk to us unless we
 # present a valid user agent.
-USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
 
-# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.110 Safari/537.36'
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#
 # Find out the nearest font to Comic Sans and store four versions of it in
 # FONTLIST for use in displaying the comic names in ConcreteListModel.data().
 # Called only from the main code during startup.
+#
 
 def setup_jolly_fonts():
     global FONTLIST
     fdb = QFontDatabase()
+
     # Find the first family in the list of known families for this platform
     # which contains the string "Comic Sans".
     qf = None
@@ -237,32 +261,35 @@ def setup_jolly_fonts():
             qf = fdb.font(family,'NORMAL',16) # get a QFont for it
             qfb = fdb.font(family,'BOLD',16) # and get a bold copy
             break
-    if qf is None :
-        # get some approximate sans-serif font
+
+    if qf is None : # no Comic Sans? Awwww! Get some sans-serif font.
         qf = QFont()
         qf.setStyleStrategy(QFont.PreferAntialias+QFont.PreferQuality)
         qf.setStyleHint(QFont.SansSerif)
         qf.setFamily(u'Comic Sans') # gets some fallback family
         qfb = QFont(qf) # make a bold version
         qfb.setBold(True)
+
     # qf and qfb are now valid fonts of some family, likely Comic Sans
-    # copy it as the old/normal font
+    # copy qf as the old/normal font
     FONTLIST[OLDCOMIC] = QFont(qf)
-    # copy it as the new/bold font
+    # copy qfb as the new/bold font
     FONTLIST[NEWCOMIC] = QFont(qfb)
-    # copy as the error/strike font
+    # copy qf the error/strike font
     FONTLIST[BADCOMIC] = QFont(qf)
     FONTLIST[BADCOMIC].setStrikeOut(True) # and make that true
-    # copy as the working/italic font
+    # copy qf the working/italic font
     FONTLIST[WORKING] = QFont(qf)
     FONTLIST[WORKING].setItalic(True) # and make it so
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#
 # Four boiler-plate messages that are pushed into the web page display
 # from time to time.
 #
-# The html for the welcome screen shown on startup.
+# This is the html for the welcome screen shown on startup.
 #
+
 WELCOME_MSG = '''
 <div style='font-family:Comic Sans MS,Comic Sans,sans-serif;'>
 <div style='text-align:center; height:6em; background-color:#666; color:#F0F; border:2px solid black;'>
@@ -330,37 +357,48 @@ GNU General Public License for more details.
 You can find a copy of the GNU General Public License at:
 <a href='http://www.gnu.org/licenses/'>www.gnu.org/licenses/</a>.</p>
 </div>'''
+
 #
-# Text displayed when a page could not be read. {0} is filled with the
-# Comic.error string.
+# Text displayed when a page could not be read, that is, when the
+# status is BADCOMIC and the user clicks on the comic name in the list.
+# {0} is filled with the Comic.error string.
 #
+
 ERROR_MSG = '''
             <p style='text-align:center;margin-top:8em;'>
             Sorry, there was some problem reading the URL for that comic.<br />
-            ({0})<br />
-            Try refreshing it or test its URL in another browser.</p>'''
+            Error message:<br />
+            {0}<br />
+            Comic URL:<br />
+            {1}<br />
+            Try refreshing it; or copy the URL and test it in another browser.</p>'''
+
 #
 # Text displayed when the comic is has not yet been read
 #
+
 UNREAD_MSG = '''<p style='text-align:center;margin-top:8em;'>
 Sorry, I have no data for this comic. Try refreshing it.</p>'''
+
 #
 # Text displayed when the comic is now being read
 #
+
 READING_MSG = '''
             <p style='text-align:center;margin-top:8em;'>
             I'm working on it, alright? Geez, gimme a sec...</p>'''
+
 #
-# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Boilerplate text written to the top of any Exported text file.
 #
+
 EXPORTBUMF = '''
 # A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
 # comic is defined on a single line by two quoted strings.
 # The first string is the comic name. The second string is its URL.
 # Example: 'Bug Comic', 'http://www.bugcomic.com'
-# The strings are delimited by 'single' or "double" quotes (sorry no guillemets)
-# and separated by spaces and/or commas. All lines that don't match
+# The strings are delimited by 'single' or "double" quotes or
+# guillemets, and separated by spaces and/or commas. Any lines that do not match
 # that format are ignored, and can be used as commentary, like these lines.
 '''
 
@@ -443,39 +481,47 @@ COMICS = [] # list of Comic objects
 # of the <img statements in it, assuming that these should not change
 # from day to day except for the one img that is the day's comic.
 #
-# This HTML parser subclass is applied to the text of a comic page.
-# The handle_starttag method is called for each tag. Only <img start tags
-# are looked at, and only the src= attribute, which is pushed into the
-# hasher. Thus the hash is built on image urls, skipping certain images
-# that are by experience false updates.
+# MyParser is an HTML parser subclass. It is applied to the text of a comic
+# page. The parser calls the handle_starttag() method for every tag. Only
+# <img start tags are looked at. The src= attribute is pushed into the
+# hasher. Thus the hash is built on image urls only.
 #
-# To simply hash the whole page gets false positives since some comics have for
-# example, random-comic links that change on every read, comments
-# documenting the number of SQL queries to generate, user forums,
-# constantly changing store displays, etc etc etc. So we parse the
-# HTML and hash only the src= attributes of <img /> statements. This
-# eliminated many but not all false positives>
+# To simply hash the whole page gets false positives since some comics have
+# for example, random-comic links that change on every read, comments
+# documenting the number of SQL queries to generate, user forums, constantly
+# changing store displays, etc etc etc. Hashing only
+# the src= attributes eliminated many false positives, but not all.
+#
+# To eliminate more, we skip src strings that contain substrings from the
+# blacklist. This allows skipping certain images that are, from experience,
+# false updates. This reduces the number of false positives, but some still
+# occur.
+#
+# NOTE: at some future time we might work out some kind of UI for the
+# blacklist so it could be updated by the user instead of being coded-in.
 #
 
 class MyParser(HTMLParser):
     def __init__(self, sha1) :
         HTMLParser.__init__(self)
         self.sha1 = sha1
-        # A list of strings that are present in images that change without
-        # any relation to new content in the actual comic. Eliminate these from
-        # the hash to prevent false positive detection of new content.
-        #  in A Multiverse, images/goat-xxxx changes randomly
-        #  in comics that use yahoo for analytics, yahoo.com/visit.gif has a random argument
-        #  some comics load different gravatars for no obvious reason
-        #  Savage Chickens injects random ads from its images directory
-        #  Ted Rall ends with a random number on cookies-for-comments
+        # The blacklist contains strings that are present in images that
+        # change without any relation to new content in the actual comic.
+
+        #  in A Multiverse, images/goat-xxxx changes randomly,
+        #  in comics that use yahoo for analytics, yahoo.com/visit.gif
+        #     has a random argument,
+        #  some comics load different gravatars for no obvious reason,
+        #  Savage Chickens injects random ads from its images directory,
+        #  Ted Rall ends with a random number on cookies-for-comments,
         #  sheldon inserts a random thumbnail of an old comic and so does
-        #  comics.com, so any image with "thumb" is junk
-        #  assets.amuniversal.com is a random ad image.
-        #  Tumblr based comics have random values in lines with "impixu?"
-        #  Gregor and others have rotating ads from project wonderful
-        #  Gregor sometimes has a "data: image/png..." monster string
-        #  SMBC has a rotating ad under SMBC-hivemill
+        #  comics.com, so any image with "thumb" is junk,
+        #  assets.amuniversal.com is a random ad image,
+        #  Tumblr based comics have random values in lines with "impixu?",
+        #  Gregor and others have rotating ads from project wonderful,
+        #  Gregor sometimes has a "data: image/png..." monster string,
+        #  SMBC has a rotating ad under SMBC-hivemill,
+        #  Various have statcounters which can change
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
@@ -486,7 +532,8 @@ class MyParser(HTMLParser):
                             'impixu?',
                             'projectwonderful.com',
                             'SMBC-hivemill',
-                            'data: '
+                            'data: ',
+                            'statcounter'
                             ]
     def read_hash(self) :
         return bytes(self.sha1.digest())
@@ -497,9 +544,8 @@ class MyParser(HTMLParser):
                     for nono in self.blacklist :
                         if nono in val :
                             return # bad image, do not include in hash
-                    #print(val) #dbg: make a record of the hash input
                     val = val.encode('utf-8','ignore')
-                    logging.info('  hash: %s', val)
+                    logging.debug('  hashing: %s', val)
                     self.sha1.update(val)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -598,7 +644,6 @@ class WorkerBee ( QThread ) :
         # read and see if it is different from the prior hash. See the
         # MyParser class above for how we build a signature.
 
-        # print('checking',comic.name) # TODO MAKE logging.debug
         # Create an HTML parser and feed it the page, line by line
         # TODO MAKE SURE THIS IS AN UNINITIALIZED HASH
         parsnip = MyParser(self.hash.copy())
@@ -630,50 +675,59 @@ class WorkerBee ( QThread ) :
     # comic.error.
     def read_url(self, comic) :
         global URLTIMEOUT, USERAGENT
+        ok_so_far = True
+        furl = None
+        page = ''
         if 0 == len(comic.url.strip()) : # URL is a null or empty string
-            return u'' # couldn't read that
-        # TODO change the following so furl is always closed
-        try:
-            # Create an http "request" object for the URL
-            ureq = urllib.request.Request(comic.url)
-            # The commercial sites (comics.com) reject us unless we
-            # show them a valid agent string.
-            ureq.add_header('User-agent', USERAGENT)
-            # Blog-based sites reject us with 403 unless we have this:
-            ureq.add_header('Accept', 'text/html')
-            #print('opening', comic.url) # TODO make logging.debug
-            # Execute the request by opening it, creating a "file" to the page.
-            # Use a timeout to avoid hang-like conditions on slow sites.
-            furl = urllib.request.urlopen(ureq,None,URLTIMEOUT)
-            # TODO change the following to log every error
-        except urllib.error.HTTPError as ugh :
-            comic.error = 'URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.reason)
-            return u''
-        except urllib.error.URLError as ugh :
-            comic.error = 'URL open failed: URLError: ' + str(ugh.reason)
-            return u''
-        except Exception as wtf :
-            comic.error = 'URL open failed: '+ str(wtf.args)
-            return u''
-        # opened the URL, now read it and convert to unicode. For that we need
-        # the encoding. Per the W3C standards, either the entire page must be UTF-8
-        # or, the first 1K must be UTF-8 and must contain a "charset" value.
-        encoding = 'UTF-8'
-        try:
-            header = furl.read(1024).decode(encoding, errors='ignore')
-            charset_match = self.charset_re.match(header)
-            if charset_match : # there was a hit on charset='encoding'
-                encoding = charset_match.group(2)
-            trailer = furl.read().decode(encoding,errors='replace')
-            page = header + trailer
-        except Exception as ugh:
-            comic.error = 'Read of open URL failed: '+str(ugh.args)
-            page = ''
-        finally:
-            furl.close()
+            logging.error('comic %s has null URL', comic.name)
+            ok_so_far = False
+        if ok_so_far :
+            try:
+                # Create an http "request" object for the URL
+                ureq = urllib.request.Request(comic.url)
+                # The commercial sites (comics.com) reject us unless we
+                # show them a valid agent string.
+                ureq.add_header('User-agent', USERAGENT)
+                # Blog-based sites reject us with 403 unless we have this:
+                ureq.add_header('Accept', 'text/html')
+                logging.debug('opening %s', comic.url)
+                # Execute the request by opening it, creating a "file" to the page.
+                # Use a timeout to avoid hang-like conditions on slow sites.
+                furl = urllib.request.urlopen(ureq, None, URLTIMEOUT)
+            except urllib.error.HTTPError as ugh :
+                comic.error = 'URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.reason)
+                ok_so_far = False
+            except urllib.error.URLError as ugh :
+                comic.error = 'URL open failed: URLError: ' + str(ugh.reason)
+                ok_so_far = False
+            except Exception as wtf :
+                comic.error = 'URL open failed: '+ str(wtf.args)
+                ok_so_far = False
+        if ok_so_far :
+            # opened the URL, now read it and convert to unicode. For that we
+            # need the encoding. Per the W3C standards, either the entire
+            # page must be UTF-8 or, the first 1K must be UTF-8 and must
+            # contain a "charset" value.
+            encoding = 'UTF-8'
+            try:
+                header = furl.read(1024).decode(encoding, errors='ignore')
+                charset_match = self.charset_re.match(header)
+                if charset_match : # there was a hit on charset='encoding'
+                    encoding = charset_match.group(2)
+                trailer = furl.read().decode(encoding,errors='replace')
+                page = header + trailer
+            except Exception as ugh:
+                comic.error = 'Read of open URL failed: '+str(ugh.args)
+                ok_so_far = False
+            finally:
+                furl.close()
+        if not ok_so_far :
+            logging.error( comic.error )
+            logging.error( '   on URL: %s', comic.url )
         return page
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#
 # Implement the concrete list model by subclassing QAbstractListModel
 # and gettin' real -- specifically by implementing these abstract methods
 # (see qthelp:model-view-programming.html#model-subclassing-reference)
@@ -722,12 +776,12 @@ page_role = url_role + 1 # data() request for page content string
 old_hash_role = page_role + 1 # data() request for old hash
 new_hash_role = old_hash_role + 1 # data() request for new hash
 status_role = new_hash_role + 1 # data() request for comic status
-# TODO KILL P2 SUPERS
+
 class ConcreteListModel ( QAbstractListModel ) :
 
     # minimal __init__ but see load()
     def __init__(self, parent=None):
-        super(QAbstractListModel,self).__init__(parent) #P2
+        super().__init__(parent)
 
     # Here we implement the methods of QAbstractListModel class that convert
     # this from an abstract list to a concrete one. First up, flags which
@@ -748,9 +802,9 @@ class ConcreteListModel ( QAbstractListModel ) :
                 basic_flag |= Qt.ItemIsDropEnabled
         return basic_flag
 
-    # Next, rowCount just says how many rows there are in the model data. We use this
-    # from our own code later as well. Note the count of rows in an ordinary item is 0;
-    # only the count for the whole list is meaningful.
+    # Next, rowCount just says how many rows there are in the model data. We
+    # use this from our own code later as well. Note the count of rows in an
+    # ordinary item is 0; only the count for the whole list is meaningful.
     def rowCount(self, parent):
         global COMICS
         if parent.isValid() :
@@ -789,14 +843,14 @@ class ConcreteListModel ( QAbstractListModel ) :
     # status of a comic on a signal from the worker thread.
     #
     # Input is a model index, a role, and some data for that role. In C++ the
-    # data would be a QVariant that we have to coerce, e.g. variant.toString(),
-    # but in PyQt5 the platform converts any QVariant to its appropriate
-    # Python type -- in these cases either string or integer -- so we just assume
-    # the type is correct and store it.
+    # data would be a QVariant that we have to coerce, e.g.
+    # variant.toString(), but in PyQt5 the platform converts any QVariant to
+    # its appropriate Python type -- in these cases either string or integer
+    # -- so we just assume the type is correct and store it.
     #
-    # After any change that affects the displayed list (which is all of them), we
-    # emit the dataChanged signal to tell the View to repaint this item.
-    # The signal arguments are the top-left and bottom-right changed
+    # After any change that affects the displayed list (which is all of
+    # them), we emit the dataChanged signal to tell the View to repaint this
+    # item. The signal arguments are the top-left and bottom-right changed
     # items, which is simply the one changed item.
 
     def setData(self, index, variant, role) :
@@ -805,7 +859,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         if role == status_role : # change the status of a comic
             # status code change results in font change, see data()
             comic.status = variant
-            #print('set',comic.name,comic.status)
+            logging.debug('set {0} to {1}'.format(comic.name,comic.status))
             self.dataChanged.emit( index, index, [role] )
             return True
         elif role == Qt.DisplayRole : # Set a new or changed name
@@ -845,11 +899,11 @@ class ConcreteListModel ( QAbstractListModel ) :
     # unless the worker thread is sleeping.
     def insertRows(self, row, count, parent) :
         global Comic, COMICS, worker_working
-        #print('insertRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
         if worker_working :
             return False
         # The worker thread is asleep and will not wake up until the user
         # requests a refresh which she cannot do while she is dragging an item.
+        logging.debug('insertRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
         self.beginInsertRows(parent, row, row+count-1 )
         # have to do this one at a time to insert scalars, not a list
         for i in range(count):
@@ -859,9 +913,9 @@ class ConcreteListModel ( QAbstractListModel ) :
 
     def removeRows(self, row, count, parent) :
         global COMICS, worker_working
-        #print('removeRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
         if worker_working :
             return False
+        logging.debug('removeRows({0} for {1}: {0}..{2})'.format(row,count,row+count-1))
         self.beginRemoveRows(parent, row, row+count-1)
         COMICS[row : row+count ] = []
         self.endRemoveRows()
@@ -873,7 +927,6 @@ class ConcreteListModel ( QAbstractListModel ) :
     # of a dict. In PyQt, it just returns a dict. In this case, a dict that
     # contains all the fields of a given comic, so that setItemData can
     # reproduce that comic in a new row.
-    # TODO: WALK THRU
     def itemData(self, index) :
         global COMICS, url_role, page_role, old_hash_role, new_hash_role, status_role
         comic = COMICS[index.row()]
@@ -885,7 +938,6 @@ class ConcreteListModel ( QAbstractListModel ) :
             new_hash_role : comic.new_hash,
             status_role : comic.status,
         }
-        #print('itemData row {0}'.format(index.row()))
         return item_dict
 
     # Here we receive the data prepared by itemData() above.
@@ -894,7 +946,6 @@ class ConcreteListModel ( QAbstractListModel ) :
     # They do not say so for setItemData(), so I won't. After all, I think
     # this is only called by drag/drop, in which case Qt should darn well
     # know that data has been changed and needs to be redisplayed.
-    # TODO: WALK THRU
     def setItemData(self, index, qdict) :
         global COMICS, url_role, page_role, old_hash_role, new_hash_role, status_role
         #print('setItemData row {0}'.format(index.row()))
@@ -917,10 +968,11 @@ class ConcreteListModel ( QAbstractListModel ) :
     #
     # In Linux it's $HOME/.config/Tassosoft/Cobro.conf
     #
-    # We use the QSettings convenience function beginWriteArray to write
-    # the array of comics as comics/1/name, comics/1/url, etc. Before saving
-    # we use remove() to clear everything in that group, because if we don't,
+    # We use the QSettings convenience function beginWriteArray to write the
+    # array of comics as comics/1/name, comics/1/url, etc. Before saving we
+    # use remove() to clear everything in that group, because if we don't,
     # deleted COMICS will come back like zombies next time we start up.
+
     def save(self, settings) :
         global COMICS
         settings.beginGroup(u'comiclist')
@@ -930,6 +982,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         settings.beginGroup(u'comiclist')
         settings.beginWriteArray(u'comics')
         for i, comic in enumerate(COMICS) :
+            logging.debug( 'saving comic {0} at {1}'.format( comic.name, i ) )
             settings.setArrayIndex(i)
             settings.setValue( u'name', comic.name)
             settings.setValue( u'url', comic.url)
@@ -937,16 +990,12 @@ class ConcreteListModel ( QAbstractListModel ) :
         settings.endArray()
         settings.endGroup()
         settings.sync() # not supposed to be needed but does no harm
-        #print('saved',i,'comics') # dbg
+        logging.debug( 'saved {0} comics'.format(i) ) # dbg
 
     # Load the comics list from the saved settings, see save() above.
     # Since this completely loads the data model, inform the view that
     # things are changing/have changed.
     #
-    # Under vague circumstances PyQt5 reports a problem converting some
-    # QVariant to Python type. Trap these errors. If it is the hash,
-    # provide a harmless default, the comic will appear to be unread.
-    # If the name or URL, give a message and skip the comic.
 
     def load(self, settings) :
         global COMICS, Comic, OLDCOMIC
@@ -964,9 +1013,10 @@ class ConcreteListModel ( QAbstractListModel ) :
                 try:
                     old_hash = settings.value(u'old_hash')
                 except:
-                    logging.INFO('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
+                    logging.ERROR('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
                 comic = Comic(name,url,old_hash,OLDCOMIC)
                 COMICS.append(comic)
+                logging.debug( 'read {0}: {1}'.format( i, name ) )
             except:
                 logging.ERROR('error reading comic {0}:{1}, comic skipped'.format(i,name))
         settings.endArray()
@@ -1052,14 +1102,15 @@ class ItemDelegate(QStyledItemDelegate):
             model.setData( index, edit_widget.urlEdit.text(), url_role )
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-# Implement the view onto the above list model. The QListView in Qt's scheme takes
-# on all the responsibility for displaying the list, keeping it up to date when the
-# model data changes, handling drag/drop, selecting and scrolling.
-#TODO:why drag behavior?
+#
+# Implement the view onto the above list model. The QListView in Qt's scheme
+# takes on all the responsibility for displaying the list, keeping it up to
+# date when the model data changes, handling drag/drop, selecting and
+# scrolling.
 
 class CobroListView(QListView) :
     def __init__(self, browser, model, parent):
-        super(QListView,self).__init__(parent)#P2
+        super().__init__(parent)
         # Save reference to our browser window for use in itemClicked()
         self.webview = browser
         # flag used to prevent a recursion loop on dataChanged signal!
@@ -1102,8 +1153,8 @@ class CobroListView(QListView) :
         self.setAutoScroll(True)
         self.setAutoScrollMargin(12)
         #
-        # Trying to set up for internal drag/drop to reorder the list, that is,
-        # a drag moves an item from one place in the list to another.
+        # Trying to set up for internal drag/drop to reorder the list, that
+        # is, a drag moves an item from one place in the list to another.
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.InternalMove)
@@ -1121,6 +1172,7 @@ class CobroListView(QListView) :
     # These are pretty much useless for our purposes. What we want to know
     # is, what is selected now and is there just one item? If so, then
     # display that item. If 0, or more than one selected, do nothing.
+
     def selectionChanged(self, selected, deselected):
         list_of_indexes = self.selectedIndexes()
         if not 1 == len(list_of_indexes) :
@@ -1183,16 +1235,18 @@ class CobroListView(QListView) :
         elif comic.status == BADCOMIC :
             # Comic had an error on the last refresh, put up an explanation
             # with error message in the browser window.
-            self.webview.setHtml( ERROR_MSG.format(comic.error), QUrl() )
+            self.webview.setHtml( ERROR_MSG.format(comic.error, comic.url), QUrl() )
         else:
             # Comic is being refreshed, plead for more time
             self.webview.setHtml( READING_MSG, QUrl() )
         self.displaying = False
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#
 # Implement the web page display, based on QWebEngineView with added
 # behaviors where those are supported by the cruelly truncated abilities of
-# QWebEngine 5.4. Initialize the display with welcome/usage/license message.
+# QWebEngine versus the old QWebPage. Initialize the display with
+# welcome/usage/license message.
 #
 
 class CobroWebPage(QWebEngineView) :
@@ -1224,21 +1278,10 @@ class CobroWebPage(QWebEngineView) :
         # Disable scripting! Well, actually, quite a few comics need j'script,
         # including (darn it) the SMBC red button!
         self.settings().setAttribute(QWebEngineSettings.JavascriptEnabled, True)
-        #self.settings().setAttribute(QWebSettings.JavaEnabled, False)
-        # Enable plugins since many comic pages use Flash
-        #self.settings().setAttribute(QWebSettings.PluginsEnabled, True)
-        # Private browsing, don't store crap in the webkit caches
-        #self.settings().setAttribute(QWebSettings.PrivateBrowsingEnabled, True)
-        # Let +/- zoom affect the image which is what we came for
-        #self.settings().setAttribute(QWebSettings.ZoomTextOnly, False)
         # Connect the load progress signals to our slots below.
         self.loadStarted.connect( self.startBar )
         self.loadProgress.connect( self.rollBar )
         self.loadFinished.connect( self.endBar )
-        ## Set our Page to "delegate" all links, that is, when a link is clicked do not
-        ## follow it but instead raise the linkClicked signal. Connect the signal.
-        #self.page().setLinkDelegationPolicy(QWebPage.DelegateExternalLinks)
-        #self.linkClicked.connect( self.link_clicked )
         # Connect the titleChanged signal to our slot.
         self.titleChanged.connect( self.newTitle )
         # Set up constants for key values so as not to bog down the keypress event.
@@ -1288,16 +1331,6 @@ class CobroWebPage(QWebEngineView) :
         if not ok :
             self.statusLine.setText(u"Some error")
 
-    ## Slot to receive the linkClicked signal. (In v.1 this was named
-    ## "linkClicked" but in PyQt5, signals are class variables, so this method
-    ## has to use a different name from the signal.) Stop any ongoing action.
-    ## Then complete the link action by calling self.setUrl.
-    #def link_clicked(self, url):
-        ##print(url.toString()) #dbg
-        #self.page().triggerAction(QWebPage.Stop)
-        ##self.settings().clearMemoryCaches()
-        #self.setUrl(url)
-
     # Slot to receive the titleChanged signal. Change the title of the
     # main window to match.
     def newTitle(self, qstitle):
@@ -1345,43 +1378,6 @@ class CobroWebPage(QWebEngineView) :
             event.ignore()
         super(QWebEngineView,self).keyPressEvent(event)
 
-    ## Re-implement the parent's contextMenuEvent handler to do our own context
-    ## menus in certain situations, but not all.
-    #def contextMenuEvent (self, cx_event) :
-        #main_frame = self.page().mainFrame()
-        #hit_test = main_frame.hitTestContent(cx_event.pos())
-        #hit_url = hit_test.linkUrl()
-        #if not hit_url.isEmpty() :
-            ## The right-click (or whatever) was upon a link. In this case we want to
-            ## offer a custom context menu with two actions: copy link url and
-            ## open link in default browser. Annoyingly, the predefined "copy link" action
-            ## provided by pageAction does not use the the global app clipboard. Since
-            ## we expect the user to paste a copied link in another app (e.g. browser)
-            ## we have to implement the copy action also.
-            #cx_event.accept()
-            ## First, save the target URL for our actions to use.
-            #self.contextUrl = hit_url.toString()
-            ## Next, create the custom two-action menu:
-            #ctx_menu = QMenu()
-            ## Action one is, copy link to clipboard
-            #ctx_copy = QAction( u'Copy link to clipboard', self )
-            #ctx_copy.triggered.connect( self.copyLinkToClipboard )
-            #ctx_menu.addAction(ctx_copy)
-            ## Action B is, open in another browser
-            #ctx_open = QAction( u'Open in default browser', self )
-            #ctx_open.triggered.connect( self.openInDefaultBrowser )
-            #ctx_menu.addAction(ctx_open)
-            ## Now show the menu.
-            #ctx_menu.exec_(cx_event.globalPos())
-        #else:
-            ## the thing right-clicked was not a link, so, meh.
-            #super().contextMenuEvent(cx_event)
-    ## Here are the slots for our two context menu actions.
-    ## The URL of the clicked link has been saved.
-    #def copyLinkToClipboard(self) :
-        #QApplication.clipboard().setText(self.contextUrl)
-    #def openInDefaultBrowser(self) :
-        #webbrowser.open_new(self.contextUrl)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Implement the application window incorporating the list and webview.
@@ -1491,6 +1487,7 @@ class TheAppWindow(QMainWindow) :
 
     # Implement the File > Refresh action, refresh selected. If no comic
     # selected, does nothing. (It's hard not to have at least 1 selected.)
+
     def refresh(self) :
         global work_queue, work_queue_lock, worker_waits
         # Get a list of the model indexes of the current selection
@@ -1502,14 +1499,14 @@ class TheAppWindow(QMainWindow) :
             work_queue_lock.unlock()
         worker_waits.wakeOne()
 
-    # Implement the File > New Comic action
-    # We can't start if a refresh is in progress, because insertRows won't work.
-    # If the worker thread is quiescent, create a custom dialog based on
-    # the same edit widget as used by the custom delegate, but augmented with
-    # OK and Cancel buttons. If the app. clipboard contains text that looks like
-    # a URL, use it to initialize the dialog. Display the dialog.
-    # If the dialog is accepted, call the model's insertRows method to add a
-    # row at the end, then load that empty Comic from the dialog values.
+    # Implement the File > New Comic action We can't start if a refresh is in
+    # progress, because insertRows won't work. If the worker thread is
+    # quiescent, create a custom dialog based on the same edit widget as used
+    # by the custom delegate, but augmented with OK and Cancel buttons. If
+    # the app. clipboard contains text that looks like a URL, use it to
+    # initialize the dialog. Display the dialog. If the dialog is accepted,
+    # call the model's insertRows method to add a row at the end, then load
+    # that empty Comic from the dialog values.
 
     def newComic(self) :
         global worker_working
@@ -1556,11 +1553,12 @@ class TheAppWindow(QMainWindow) :
             self.model.setData( ix, edwig.nameEdit.text(), Qt.DisplayRole )
             self.model.setData( ix, edwig.urlEdit.text(), url_role )
 
-    # Implement the File > Delete action: Make sure the refresh worker
-    # isn't running. Get the current selection as a list of model indexes.
-    # Query the user if she's serious. If so, call the model one index at
-    # a time, working from the end backward so as not to invalidate
-    # the indexes, to remove the rows.
+    # Implement the File > Delete action: Make sure the refresh worker isn't
+    # running. Get the current selection as a list of model indexes. Query
+    # the user if she's serious. If so, call the model one index at a time,
+    # working from the end backward so as not to invalidate the indexes, to
+    # remove the rows.
+
     def delete(self) :
         global worker_working
         if worker_working :
@@ -1595,6 +1593,7 @@ class TheAppWindow(QMainWindow) :
     # provide a file to write into. The starting directory is the last
     # directory we've used for export or import. Write a text file with one
     # line per selected comic.
+
     def file_export(self) :
         global COMICS, url_role, EXPORTBUMF
         ix_list = self.view.selectedIndexes()
@@ -1640,11 +1639,13 @@ class TheAppWindow(QMainWindow) :
         finally:
             fobj.close()
 
-    # Implement the File > Import action. Tell the view to clear the selection.
-    # Ask the user to specify a file to read. (Exit if cancel.) Use as the starting
-    # directory the last directory we've used. Read the file by lines, testing each
-    # against an RE. If the RE matches, create a new comic using the strings from the
-    # match. Look for a comic with the same name and replace it if found, or append.
+    # Implement the File > Import action. Tell the view to clear the
+    # selection. Ask the user to specify a file to read. (Exit if cancel.)
+    # Use as the starting directory the last directory we've used. Read the
+    # file by lines, testing each against an RE. If the RE matches, create a
+    # new comic using the strings from the match. Look for a comic with the
+    # same name and replace it if found, or append.
+
     def file_import(self) :
         global COMICS, url_role, worker_working
         if worker_working :
@@ -1717,18 +1718,19 @@ class TheAppWindow(QMainWindow) :
         finally:
             fobj.close()
 
-    # -----------------------------------------------------------------
     # reimplement QWidget::closeEvent() to save the current comics.
+
     def closeEvent(self, event):
         global worker_waits
         event.accept()
-        # make sure the webkit is in a clean state
+        # make sure the browser is in a clean state
         self.page.page().triggerAction(QWebEnginePage.Stop)
         # Tell the worker thread to shut down.
         self.worker.quit()
         # Save window geometry in settings
         self.settings.setValue("cobro/size",self.size())
         self.settings.setValue("cobro/position", self.pos())
+        # Save all comics
         self.model.save(self.settings)
 
 # Keep a global reference to the app object until final, final end
