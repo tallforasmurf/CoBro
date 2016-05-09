@@ -520,7 +520,8 @@ class MyParser(HTMLParser):
         #  Tumblr based comics have random values in lines with "impixu?",
         #  Gregor and others have rotating ads from project wonderful,
         #  Gregor sometimes has a "data: image/png..." monster string,
-        #  SMBC has a rotating ad under SMBC-hivemill,
+        #  SMBC has a rotating ad under SMBC-hivemill, and something
+        #   that changes under pixel.quantserve.com/pixel
         #  Various have statcounters which can change
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
@@ -533,7 +534,8 @@ class MyParser(HTMLParser):
                             'projectwonderful.com',
                             'SMBC-hivemill',
                             'data: ',
-                            'statcounter'
+                            'statcounter',
+                            'pixel.quantserve.com'
                             ]
     def read_hash(self) :
         return bytes(self.sha1.digest())
@@ -721,7 +723,13 @@ class WorkerBee ( QThread ) :
                 ok_so_far = False
             finally:
                 furl.close()
-        if not ok_so_far :
+        if ok_so_far :
+            # The hiveworks.com "jump bar" is a banner ad that lets the user
+            # jump to another comic from the hiveworks stable. It causes
+            # QWebEngine to throw a lot of harmless errors. So just remove it
+            # from the page if it is there.
+            page = page.replace( '<script src="http://www.thehiveworks.com/jumpbar.js"></script>', '' )
+        else:
             logging.error( comic.error )
             logging.error( '   on URL: %s', comic.url )
         return page
