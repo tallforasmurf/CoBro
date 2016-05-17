@@ -1400,6 +1400,7 @@ class TheAppWindow(QMainWindow) :
         super(QMainWindow,self).__init__(parent) #P2
         # Save the settings instance for use at shutdown (see below)
         self.settings = settings
+        self.settings_have_been_saved = False
         # Here store the last-used directory to start file selection dialogs
         self.starting_dir = os.getcwd()
         # Create the list model and keep a reference to it.
@@ -1730,16 +1731,22 @@ class TheAppWindow(QMainWindow) :
 
     def closeEvent(self, event):
         global worker_waits
-        event.accept()
         # make sure the browser is in a clean state
         self.page.page().triggerAction(QWebEnginePage.Stop)
         # Tell the worker thread to shut down.
         self.worker.quit()
-        # Save window geometry in settings
-        self.settings.setValue("cobro/size",self.size())
-        self.settings.setValue("cobro/position", self.pos())
-        # Save all comics
-        self.model.save(self.settings)
+        if not self.settings_have_been_saved :
+            try :
+                # Save window geometry in settings
+                self.settings.setValue("cobro/size",self.size())
+                self.settings.setValue("cobro/position", self.pos())
+                # Save all comics
+                self.model.save(self.settings)
+                self.settings_have_been_saved = True # don't come back
+            except Exception as wtf :
+                logging.error('Error saving settings:\n' + str(wtf) )
+        event.accept()
+        super().closeEvent(event)
 
 # Keep a global reference to the app object until final, final end
 APP = None
