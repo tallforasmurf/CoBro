@@ -237,10 +237,17 @@ WORKING = 3  # status while reading a url (name in italic)
 FONTLIST = [None, None, None, None]
 
 # A valid user agent string, as returned by whatsmyuseragent.com when visited
-# using a recent Chrome browser. Some webcomics will not talk to us unless we
+# using various browsers. Some webcomics will not talk to us unless we
 # present a valid user agent.
 
-USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.110 Safari/537.36'
+# chrome agent as of 11 July 17
+CHROME_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
+# firefox agent as of 11 July 17
+FIREFOX_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:54.0) Gecko/20100101 Firefox/54.0'
+# safari as of 11 July 17
+SAFARI_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/603.2.5 (KHTML, like Gecko) Version/10.1.1 Safari/603.2.5'
+
+USERAGENT = FIREFOX_AGENT_STRING
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
@@ -500,6 +507,14 @@ COMICS = [] # list of Comic objects
 # NOTE: at some future time we might work out some kind of UI for the
 # blacklist so it could be updated by the user instead of being coded-in.
 #
+# NOTE: a particular problem is the comic romanticallyapocalyptic.com, which
+# loads dozens of things from subdirectories, .../imgs or .../flags or
+# .../badges, and not in the same order each time. Because order matters when
+# composing a hash, the same things loaded in different order will make a
+# mismatched hash. The only way to fix this comic would be to ignore all img
+# tags except for one from the subdirectory .../art/... This would require a
+# positive test, not a negative filter, and a regex at that.
+#
 
 class MyParser(HTMLParser):
     def __init__(self, sha1) :
@@ -523,6 +538,7 @@ class MyParser(HTMLParser):
         #  SMBC has a rotating ad under SMBC-hivemill, and something
         #   that changes under pixel.quantserve.com/pixel
         #  Various have statcounters which can change
+        #  Jesus and Mo has a random image of an old comic
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
@@ -535,7 +551,8 @@ class MyParser(HTMLParser):
                             'SMBC-hivemill',
                             'data: ',
                             'statcounter',
-                            'pixel.quantserve.com'
+                            'pixel.quantserve.com',
+                            '150x150.jpg'
                             ]
     def read_hash(self) :
         return bytes(self.sha1.digest())
@@ -719,7 +736,7 @@ class WorkerBee ( QThread ) :
                 trailer = furl.read().decode(encoding,errors='replace')
                 page = header + trailer
             except Exception as ugh:
-                comic.error = 'Read of open URL failed: '+str(ugh.args)
+                comic.error = 'Read of open URL failed: '+str(ugh)
                 ok_so_far = False
             finally:
                 furl.close()
@@ -1750,12 +1767,17 @@ class TheAppWindow(QMainWindow) :
 
 # Keep a global reference to the app object until final, final end
 APP = None
+# Keep note of the platform versions
+VERSIONSTRING = ''
 
 if __name__ == "__main__":
 
     import sys # for argv
     import logging
     import argparse
+    # grab info on platform versions
+    from PyQt5.Qt import PYQT_VERSION_STR, QT_VERSION_STR
+    VERSIONSTRING = 'PyQt {}, Qt {}'.format( PYQT_VERSION_STR, QT_VERSION_STR )
 
     # Create the App so all the other Qt stuff will work
     APP = QApplication(sys.argv)
@@ -1778,14 +1800,20 @@ if __name__ == "__main__":
         socket.setdefaulttimeout(10)
 
     # parse for command line arguments which currently relate only to
-    # logging: --level=[INFO|ERROR] --logfile=filepath
+    # logging:
+    # --level=[INFO|ERROR]
     parser = argparse.ArgumentParser()
     parser.add_argument('--level',dest='level',
                         choices=['DEBUG', 'INFO','ERROR'],default='ERROR',
                         help='use INFO to see items hashed for each comic')
+    # --logfile=filepath
     parser.add_argument('--logfile',dest='logfile',type=argparse.FileType('w'),
                         help='specify a text file to receive log data in place of stderr',
                         default=None)
+    # --logitem=string
+    parser.add_argument('--logitem',action='append',nargs='*',
+                        help='select one or more specific comics to log'
+                        )
     args = parser.parse_args()
 
     # Set up simple logging to stderr...
