@@ -164,6 +164,7 @@ import collections # for deque
 import hashlib # for sha-1
 import urllib.request # for reading URLs, eh?
 import urllib.error # for except statements
+import ssl # for a context allowing SSLV3
 # import webbrowser # for platform-independent access to system default browser
 import re # regular expressions
 import os # getcwd
@@ -410,6 +411,13 @@ EXPORTBUMF = '''
 '''
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# The list of names or parts of names that are to be logged. This is
+# built in the main code after arguments are parsed. It is tested in
+# ConcreteListModel.load() to set the loggit value in each Comic.
+
+LOG_NAMES = []
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Some message routines.
 
 # Create and run a QMessageBox (inner method)
@@ -465,6 +473,9 @@ def okCancelMsg ( text, info = None ):
 #
 #   error:     error string to display when status==BADCOMIC
 #
+#   loggit:    normally False, True when operations on this URL should
+#              be logged to stdout.
+#
 
 class Comic(object) :
     def __init__(self, name='', url=u'', hash=b'\x00', s=OLDCOMIC ) :
@@ -475,6 +486,7 @@ class Comic(object) :
         self.status = s
         self.page = ''
         self.error = ''
+        self.loggit = False
 
 #
 # The list is initialized at startup, see ConcreteListModel.load()
@@ -488,38 +500,46 @@ COMICS = [] # list of Comic objects
 # of the <img statements in it, assuming that these should not change
 # from day to day except for the one img that is the day's comic.
 #
-# MyParser is an HTML parser subclass. It is applied to the text of a comic
-# page. The parser calls the handle_starttag() method for every tag. Only
-# <img start tags are looked at. The src= attribute is pushed into the
-# hasher. Thus the hash is built on image urls only.
+# MyParser is an HTML parser subclass. A new parser object is created for
+# each Comic object that is read. The __init__ receives a new sha1 hasher
+# object to use and a flag indicating if the hash process is to be logged.
+#
+# The parser is applied to the text read from a comic's page. The parser
+# calls the handle_starttag() method for every tag it finds. In this parser,
+# only <img start tags are looked at. The src= attribute is pushed into the
+# hasher. Thus the hash is built on image urls only. The idea is that when
+# this hash is the same as the prior time the comic was read, the comic has
+# not changed. When the hash is different, the comic is presumed new.
 #
 # To simply hash the whole page gets false positives since some comics have
 # for example, random-comic links that change on every read, comments
 # documenting the number of SQL queries to generate, user forums, constantly
-# changing store displays, etc etc etc. Hashing only
-# the src= attributes eliminated many false positives, but not all.
+# changing store displays, etc etc etc. Hashing only the src= attributes
+# eliminated many false positives, but not all.
 #
-# To eliminate more, we skip src strings that contain substrings from the
-# blacklist. This allows skipping certain images that are, from experience,
-# false updates. This reduces the number of false positives, but some still
-# occur.
+# To eliminate more, we skip src strings that contain substrings from a
+# blacklist. This allows skipping certain images that are known from
+# experience to change often independently from the actual comic. This
+# reduces the number of false positives, but some still occur.
 #
 # NOTE: at some future time we might work out some kind of UI for the
 # blacklist so it could be updated by the user instead of being coded-in.
 #
-# NOTE: a particular problem is the comic romanticallyapocalyptic.com, which
-# loads dozens of things from subdirectories, .../imgs or .../flags or
-# .../badges, and not in the same order each time. Because order matters when
-# composing a hash, the same things loaded in different order will make a
-# mismatched hash. The only way to fix this comic would be to ignore all img
-# tags except for one from the subdirectory .../art/... This would require a
-# positive test, not a negative filter, and a regex at that.
+# NOTE: an example of why false positives are hard to eliminate is the comic
+# romanticallyapocalyptic.com, which loads dozens of things from
+# subdirectories, .../imgs or .../flags or .../badges, and not in the same
+# order each time. Because order matters when composing a hash, the same
+# things loaded in different order will make a mismatched hash. The only way
+# to fix this comic would be to ignore all img tags except for one from the
+# subdirectory .../art/... This would require a positive test, not a negative
+# filter, and a regex at that.
 #
 
 class MyParser(HTMLParser):
-    def __init__(self, sha1) :
+    def __init__( self, sha1, loggit=False ) :
         HTMLParser.__init__(self)
         self.sha1 = sha1
+        self.loggit = loggit
         # The blacklist contains strings that are present in images that
         # change without any relation to new content in the actual comic.
 
@@ -554,18 +574,27 @@ class MyParser(HTMLParser):
                             'pixel.quantserve.com',
                             '150x150.jpg'
                             ]
+    # This new method is called to read out the accumulated hash.
     def read_hash(self) :
         return bytes(self.sha1.digest())
+    # This overrides the standard method to examine any HTML tag
+    # and hash the ones of interest.
     def handle_starttag(self, tag, attrs):
+        # Only care about <img tags,
         if tag == 'img' :
+            # look at the attributes for the src= attribute.
             for (attr,val) in attrs :
                 if attr == 'src' :
+                    # check for presence of blacklisted text element
                     for nono in self.blacklist :
                         if nono in val :
                             return # bad image, do not include in hash
+                    # put the source URL in the hash and log it
                     val = val.encode('utf-8','ignore')
-                    logging.debug('  hashing: %s', val)
                     self.sha1.update(val)
+                    if self.loggit:
+                        logging.info('  hashing: %s', val)
+
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #   Synchronization between the main thread and the refresh thread.
@@ -603,7 +632,7 @@ class WorkerBee ( QThread ) :
     statusChanged = pyqtSignal(int, int)
 
     def __init__(self, parent=None):
-        super(QThread,self).__init__(parent)
+        super().__init__(parent)
         # save a hasher which will be duplicated for each comic read
         self.hash = hashlib.sha1()
         # save an RE used to detect charset='encoding' or encoding='charset'
@@ -650,8 +679,9 @@ class WorkerBee ( QThread ) :
         self.statusChanged.emit( row, WORKING )
         comic = COMICS[row]
         # Read the comic page once and save it, no matter status
-        logging.info('Reading comic %s',comic.name)
-        page_text = self.read_url(comic) # TODO bytes or string??
+        if comic.loggit:
+            logging.info('Reading comic %s',comic.name)
+        page_text = self.read_url(comic)
         comic.page = page_text
         if 0 == len(page_text) :
             # some problem reading the comic, mark it bad and quit.
@@ -664,9 +694,8 @@ class WorkerBee ( QThread ) :
         # MyParser class above for how we build a signature.
 
         # Create an HTML parser and feed it the page, line by line
-        # TODO MAKE SURE THIS IS AN UNINITIALIZED HASH
-        parsnip = MyParser(self.hash.copy())
-        page_as_file = io.StringIO(page_text)
+        parsnip = MyParser( self.hash.copy(), comic.loggit )
+        page_as_file = io.StringIO( page_text )
         line = page_as_file.readline()
         while 0 < len(line):
             try:
@@ -682,11 +711,13 @@ class WorkerBee ( QThread ) :
         if comic.old_hash != comic.new_hash :
             # The comic's web page has changed since it was displayed.
             self.statusChanged.emit( row, NEWCOMIC )
-            logging.info('%s appears to be unread',comic.name)
+            if comic.loggit :
+                logging.info('%s appears to be unread',comic.name)
         else :
             # It has not changed, hash is the same as last time.
             self.statusChanged.emit( row, OLDCOMIC )
-            logging.info('%s appears to be old',comic.name)
+            if comic.loggit :
+                logging.info('%s appears to be old',comic.name)
         return
 
     # Given a comic, read the single html page at its url and return the page
@@ -709,10 +740,14 @@ class WorkerBee ( QThread ) :
                 ureq.add_header('User-agent', USERAGENT)
                 # Blog-based sites reject us with 403 unless we have this:
                 ureq.add_header('Accept', 'text/html')
+                ## Create an SSL context that permits the "broken" SSLV3 which
+                ## is used by some comics notable Megacynics.com
+                #uctx = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
+                #uctx.options &= ~ssl.OP_NO_SSLv3
                 logging.debug('opening %s', comic.url)
                 # Execute the request by opening it, creating a "file" to the page.
                 # Use a timeout to avoid hang-like conditions on slow sites.
-                furl = urllib.request.urlopen(ureq, None, URLTIMEOUT)
+                furl = urllib.request.urlopen(ureq, None, URLTIMEOUT )
             except urllib.error.HTTPError as ugh :
                 comic.error = 'URL open failed: HTTPError {0}, {1}'.format(ugh.code, ugh.reason)
                 ok_so_far = False
@@ -1040,6 +1075,12 @@ class ConcreteListModel ( QAbstractListModel ) :
                 except:
                     logging.ERROR('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
                 comic = Comic(name,url,old_hash,OLDCOMIC)
+                # Look to see if this comic wants logging. Implement an undocumented
+                # hack, "*" matches any.
+                for substring in LOG_NAMES :
+                    if substring == '*' or substring.lower() in name.lower() :
+                        comic.loggit = True
+                        break
                 COMICS.append(comic)
                 logging.debug( 'read {0}: {1}'.format( i, name ) )
             except:
@@ -1525,14 +1566,15 @@ class TheAppWindow(QMainWindow) :
             work_queue_lock.unlock()
         worker_waits.wakeOne()
 
-    # Implement the File > New Comic action We can't start if a refresh is in
-    # progress, because insertRows won't work. If the worker thread is
-    # quiescent, create a custom dialog based on the same edit widget as used
-    # by the custom delegate, but augmented with OK and Cancel buttons. If
-    # the app. clipboard contains text that looks like a URL, use it to
-    # initialize the dialog. Display the dialog. If the dialog is accepted,
-    # call the model's insertRows method to add a row at the end, then load
-    # that empty Comic from the dialog values.
+    # Implement the File > New Comic action.
+
+    # We can't start if a refresh is in progress, because insertRows won't
+    # work. If the worker thread is quiescent, create a custom dialog based
+    # on the same edit widget as used by the custom delegate, but augmented
+    # with OK and Cancel buttons. If the app. clipboard contains text that
+    # looks like a URL, use it to initialize the dialog. Display the dialog.
+    # If the dialog is accepted, call the model's insertRows method to add a
+    # row at the end, then load that empty Comic from the dialog values.
 
     def newComic(self) :
         global worker_working
@@ -1579,11 +1621,12 @@ class TheAppWindow(QMainWindow) :
             self.model.setData( ix, edwig.nameEdit.text(), Qt.DisplayRole )
             self.model.setData( ix, edwig.urlEdit.text(), url_role )
 
-    # Implement the File > Delete action: Make sure the refresh worker isn't
-    # running. Get the current selection as a list of model indexes. Query
-    # the user if she's serious. If so, call the model one index at a time,
-    # working from the end backward so as not to invalidate the indexes, to
-    # remove the rows.
+    # Implement the File > Delete action.
+
+    # Make sure the refresh worker isn't running. Get the current selection
+    # as a list of model indexes. Query the user if she's serious. If so,
+    # call the model one index at a time, working from the end backward so as
+    # not to invalidate the indexes, to remove the rows.
 
     def delete(self) :
         global worker_working
@@ -1614,11 +1657,12 @@ class TheAppWindow(QMainWindow) :
         # and that's it
         return
 
-    # Implement the File > Export action. Get the list of selected comic
-    # indexes. If none are selected, get the list of all. Ask the user to
-    # provide a file to write into. The starting directory is the last
-    # directory we've used for export or import. Write a text file with one
-    # line per selected comic.
+    # Implement the File > Export action.
+
+    # Get the list of selected comic indexes. If none are selected, get the
+    # list of all. Ask the user to provide a file to write into. The starting
+    # directory is the last directory we've used for export or import. Write
+    # a text file with one line per selected comic.
 
     def file_export(self) :
         global COMICS, url_role, EXPORTBUMF
@@ -1665,12 +1709,14 @@ class TheAppWindow(QMainWindow) :
         finally:
             fobj.close()
 
-    # Implement the File > Import action. Tell the view to clear the
-    # selection. Ask the user to specify a file to read. (Exit if cancel.)
-    # Use as the starting directory the last directory we've used. Read the
-    # file by lines, testing each against an RE. If the RE matches, create a
-    # new comic using the strings from the match. Look for a comic with the
-    # same name and replace it if found, or append.
+    # Implement the File > Import action.
+
+    # Tell the view to clear the selection. Ask the user to specify a file to
+    # read. (Exit if cancel.) Use as the starting directory the last
+    # directory we've used. Read the file by lines, testing each against an
+    # RE. If the RE matches, create a new comic using the strings from the
+    # match. Look for a comic with the same name and replace it if found, or
+    # append.
 
     def file_import(self) :
         global COMICS, url_role, worker_working
@@ -1765,8 +1811,12 @@ class TheAppWindow(QMainWindow) :
         event.accept()
         super().closeEvent(event)
 
-# Keep a global reference to the app object until final, final end
+# Keep a global reference to the app object until final, final end. This
+# ensures that the QApplication will not be garbaged by Python before the
+# program is really over.
+
 APP = None
+
 # Keep note of the platform versions
 VERSIONSTRING = ''
 
@@ -1781,12 +1831,14 @@ if __name__ == "__main__":
 
     # Create the App so all the other Qt stuff will work
     APP = QApplication(sys.argv)
+
     # Set up the parameters of our QSettings, in which the comics
     # we know about are stored.
     APP.setOrganizationName("Tassosoft")
     APP.setOrganizationDomain("tassos-oak.com")
     APP.setApplicationName("Cobro")
     APP.setApplicationVersion("2.0")
+
     # Create the settings object to use in accessing the settings
     settings = QSettings()
 
@@ -1805,16 +1857,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--level',dest='level',
                         choices=['DEBUG', 'INFO','ERROR'],default='ERROR',
-                        help='use INFO to see items hashed for each comic')
+                        help='''ERROR: display only problems;
+INFO to see comics named to --logitem; DEBUG for useless info''')
     # --logfile=filepath
     parser.add_argument('--logfile',dest='logfile',type=argparse.FileType('w'),
                         help='specify a text file to receive log data in place of stderr',
                         default=None)
-    # --logitem=string
-    parser.add_argument('--logitem',action='append',nargs='*',
-                        help='select one or more specific comics to log'
+    # --logitem=string, string...
+    parser.add_argument('--logitem',action='append',nargs='+',
+                        help='''Give names, or parts of names, of comics to log.
+Example: "--logitem xk fuzz" to log the processing of XKCD and Get Fuzzy.'''
                         )
     args = parser.parse_args()
+    if args.logitem is not None :
+        # ensure log level is at least INFO to allow showing logged items
+        if args.level == 'ERROR' :
+            args.level = 'INFO'
+        # The value in args.logitem is a list of lists, one list for
+        # each use of --logitem. Flatten that list into the global LOG_NAMES.
+        for inner_list in args.logitem :
+            for item in inner_list :
+                LOG_NAMES.append( item )
 
     # Set up simple logging to stderr...
     import logging
@@ -1825,7 +1888,13 @@ if __name__ == "__main__":
     else :
         logging.basicConfig( level=lvl, stream=args.logfile )
 
-    # Tentative code to explore Qt's qInstallMessageHandler
+    # Open the log with the version string.
+    logging.info( 'Cobro starting: ' + VERSIONSTRING )
+
+    # Tentative code to explore Qt's qInstallMessageHandler. This diverts Qt
+    # internal error messages to us, so we can log them in the same stream as
+    # other logging.
+
     from PyQt5.QtCore import qInstallMessageHandler, QMessageLogContext
     from PyQt5.Qt import QtMsgType
 
