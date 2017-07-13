@@ -169,6 +169,7 @@ import ssl # for a context allowing SSLV3
 import re # regular expressions
 import os # getcwd
 import io # stringIO
+import datetime # for now
 from html.parser import HTMLParser # see MyParser below
 
 from PyQt5.QtWidgets import (
@@ -1889,7 +1890,7 @@ Example: "--logitem xk fuzz" to log the processing of XKCD and Get Fuzzy.'''
         logging.basicConfig( level=lvl, stream=args.logfile )
 
     # Open the log with the version string.
-    logging.info( 'Cobro starting: ' + VERSIONSTRING )
+    logging.info( 'Cobro starting at {} on {}'.format( str(datetime.datetime.now()), VERSIONSTRING ) )
 
     # Tentative code to explore Qt's qInstallMessageHandler. This diverts Qt
     # internal error messages to us, so we can log them in the same stream as
