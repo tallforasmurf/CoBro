@@ -14,26 +14,19 @@
 'Cy & H', 'http://www.explosm.net/comics/'
 'Dinosaur Comics', 'http://www.qwantz.com/index.php'
 'Doghouse Diaries', 'http://thedoghousediaries.com/'
-'Gregor Comics', 'http://gregor-comics.com/'
 'Jesus and Mo', 'http://www.jesusandmo.net/', '-------'
-'Megacynics', 'http://www.megacynics.com/'
 'PhD Comics', 'http://www.phdcomics.com/comics.php'
 'Questionable Content', 'http://questionablecontent.net/'
-'Romantically Apocalyptic', 'http://romanticallyapocalyptic.com/'
 'Sinfest', 'http://www.sinfest.net/'
 'SMBC', 'http://www.smbc-comics.com/'
 'Toothpaste For Dinner', 'http://www.toothpastefordinner.com/'
-'Tree Lobsters', 'http://www.treelobsters.com/'
 'Buttersafe', 'http://buttersafe.com'
-'Hark! A Vagrant!', 'http://www.harkavagrant.com/index.php'
-'Johny Wander', 'http://www.johnnywander.com'
-'Collected Curios (multicomic)', 'http://www.collectedcurios.com/'
 'Extra Ordinary', 'http://www.exocomics.com'
-'POPsickleSTRIP', 'http://popstrip.com/'
-'Squid Row', 'http://squidrowcomics.com'
-'Two Guys and Guy', 'http://www.twogag.com'
 'Dork Toes', 'http://dorktoescomic.com/'
 # note apostrophe in "Fredo and Pid'Jin" is a big no-no!!!
 'Fredo and Pidjin', 'http://www.pidjin.net/'
 'Girls with Slingshots', 'http://www.girlswithslingshots.com/'
-'Ctrl-Alt-Del', 'http://www.cad-comic.com/cad/'
+"owlturd", "http://owlturd.com/search/COMIC"
+"Basic Instructions", "http://basicinstructions.net"
+"magnificatz", "http://magnificatz.com/"
+"Loadingartist", "http://www.loadingartist.com/latest"

@@ -10,12 +10,21 @@
 * several, e.g. Agnes, Stone Soup, are major comics with newspaper distribution
 
 'Agnes', 'http://comics.com/agnes/'
-'Bug Comic', 'http://www.bugcomic.com/'
+'Bug Comic', 'http://www.bugmartini.com/'
 'Candorville', 'http://candorville.com/'
-'Foxtrot', 'http://www.foxtrot.com/'
 'Free Range', 'http://www.gocomics.com/freerange'
-'PhD Comics', 'http://www.phdcomics.com/comics.php'
-'Real Life', 'http://www.reallifecomics.com/'
-'Shoe', 'http://www.ucomics.com/shoe/'
+"Get Fuzzy", "http://www.gocomics.com/getfuzzy?ref=comics"
 'Stone Soup', 'http://www.gocomics.com/stonesoup'
 'Savage Chickens', 'http://www.savagechickens.com/'
+'Squid Row', 'http://squidrowcomics.com'
+"home based", "http://www.homebasedcomic.com/"
+"Sheldon", "http://sheldoncomics.com"
+
+* The following are long-running graphic novels. You need to read the
+* whole backstory in the archives, then use CoBro to stay up to date.
+
+"Stand Still Stay Silent", "http://sssscomic.com/comic.php"
+"Gunnerkrigg Court", "http://gunnerkrigg.com"
+"Vagabond Starlight", "http://vagabondstarlight.com"
+"Drive", "http://drivecomic.com"
+"Scurry", "http://www.scurrycomic.com/scurry-comic"
