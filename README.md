@@ -117,6 +117,20 @@ On shutdown, Cobro stores the current window geometry, and for each comic its na
 
 * Linux: $HOME/.config/Tassosoft/Cobro.conf
 
+About "Unread" Status
+---------------------
+
+CoBro decides that a comic is probably unread, and makes it bold in the list, when the contents of the comic appear to be different from the last time it was refreshed. This is done by forming a hash based on elements of the web page as read from the comic URL.
+
+The only elements that go into the hash are the `src=` attributes of its `<img` statements. In most comic web pages, the only image that changes from time to time is the image of the comic itself. So when the actual comic image changes, the hash will vary from the prior time, and CoBro will mark the comic bold meaning unread.
+
+Almost all comic pages include image elements other than the comic itself, and these can change. In particular, images related to advertisements are often different every time a URL is fetched, without regard for whether the comic itself is different. This causes "false positive" tests: comics that are marked Unread and when you click them, it's the same comic as last time.
+
+CoBro deals with many of these by having a "stop list" for certain strings that appear in  advertisements. Images whose sources contain one of these strings are not included in the hash. (See the code for `self.blacklist` around line 570 of the file.) This list prevents many false positives. Please open an issue if you know of another string that should be added to the blacklist.
+
+Sadly, a few comics do things in a way that a blacklist can't help. In particular, Jesus and Mo and Savage Chickens both have the awkward habit of occasionally **not** loading an image that they loaded a prior time. There's no obvious reason they would load it one time and not the next -- it is not an ad -- but they do that, and it causes the hash to differ when the comic image is not changed.
+
+
 Command-line arguments
 -----------------------
 
@@ -136,7 +150,6 @@ When you log a comic by name, for example `--logitem xk` to log the XKCD comic, 
     INFO:root:  hashing: b'//imgs.xkcd.com/s/a899e84.jpg'
     INFO:root:XKCD appears to be unread
 
-The "hashing" lines show you the data that are being extracted and used to make the hash value that CoBro uses to tell when a comic is different from the last time it is read.
+The "hashing" lines show you the data that are being extracted and used to make the hash value that CoBro uses to tell when a comic is different from the last time it is read. You can use this to diagnose false positive "unread" status.
 
-At present there is nothing much you can do with this information.
 
