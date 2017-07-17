@@ -1042,6 +1042,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         settings.sync() # not supposed to be needed but does no harm
         settings.beginGroup(u'comiclist')
         settings.beginWriteArray(u'comics')
+        i = 0 # in case COMICS is empty!
         for i, comic in enumerate(COMICS) :
             logging.debug( 'saving comic {0} at {1}'.format( comic.name, i ) )
             settings.setArrayIndex(i)
@@ -1861,7 +1862,7 @@ if __name__ == "__main__":
                         help='''ERROR: display only problems;
 INFO to see comics named to --logitem; DEBUG for useless info''')
     # --logfile=filepath
-    parser.add_argument('--logfile',dest='logfile',type=argparse.FileType('w'),
+    parser.add_argument('--logfile',dest='logfile',
                         help='specify a text file to receive log data in place of stderr',
                         default=None)
     # --logitem=string, string...
@@ -1887,7 +1888,7 @@ Example: "--logitem xk fuzz" to log the processing of XKCD and Get Fuzzy.'''
     if args.logfile is None :
         logging.basicConfig( level=lvl )
     else :
-        logging.basicConfig( level=lvl, stream=args.logfile )
+        logging.basicConfig( filename=args.logfile, level=lvl )
 
     # Open the log with the version string.
     logging.info( 'Cobro starting at {} on {}'.format( str(datetime.datetime.now()), VERSIONSTRING ) )
@@ -1925,4 +1926,6 @@ Example: "--logitem xk fuzz" to log the processing of XKCD and Get Fuzzy.'''
     # collection, hopefully to avoid the occasional SIGSEGV on termination.
     del(main)
     del(APP)
+    logging.info( 'Cobro shut down at {}'.format( str(datetime.datetime.now()) ) )
+
     # c'est tout!
