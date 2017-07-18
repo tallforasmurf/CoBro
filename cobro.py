@@ -1824,9 +1824,13 @@ VERSIONSTRING = ''
 
 if __name__ == "__main__":
 
-    import sys # for argv
+    import sys # for argv, platform
     import logging
     import argparse
+    # work around a bug in Ubuntu 16 re libgl
+    if sys.platform.startswith( 'linux' ) :
+        from OpenGL import GL
+
     # grab info on platform versions
     from PyQt5.Qt import PYQT_VERSION_STR, QT_VERSION_STR
     VERSIONSTRING = 'PyQt {}, Qt {}'.format( PYQT_VERSION_STR, QT_VERSION_STR )
