@@ -549,6 +549,7 @@ class MyParser(HTMLParser):
         #     has a random argument,
         #  some comics load different gravatars for no obvious reason,
         #  Savage Chickens injects random ads from its images directory,
+        #     and sometimes varies the name of uploads/ebook*
         #  Ted Rall ends with a random number on cookies-for-comments,
         #  sheldon inserts a random thumbnail of an old comic and so does
         #  comics.com, so any image with "thumb" is junk,
@@ -559,11 +560,12 @@ class MyParser(HTMLParser):
         #  SMBC has a rotating ad under SMBC-hivemill, and something
         #   that changes under pixel.quantserve.com/pixel
         #  Various have statcounters which can change
-        #  Jesus and Mo has a random image of an old comic
+        #  Jesus and Mo has an old comic thumbnail that comes and goes
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
                             'savagechickens.com/images',
+                            'uploads/ebook',
                             'cookies-for-comments',
                             'thumb',
                             'assets.amuniversal.com',
@@ -573,7 +575,7 @@ class MyParser(HTMLParser):
                             'data: ',
                             'statcounter',
                             'pixel.quantserve.com',
-                            '150x150.jpg'
+                            '150x150'
                             ]
     # This new method is called to read out the accumulated hash.
     def read_hash(self) :
