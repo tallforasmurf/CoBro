@@ -249,7 +249,7 @@ FIREFOX_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:54.0) G
 # safari as of 11 July 17
 SAFARI_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/603.2.5 (KHTML, like Gecko) Version/10.1.1 Safari/603.2.5'
 
-USERAGENT = FIREFOX_AGENT_STRING
+USERAGENT = SAFARI_AGENT_STRING
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
@@ -1177,18 +1177,25 @@ class ItemDelegate(QStyledItemDelegate):
 # takes on all the responsibility for displaying the list, keeping it up to
 # date when the model data changes, handling drag/drop, selecting and
 # scrolling.
+#
+# When a comic is selected in the list, display it in the browser.
 
 class CobroListView(QListView) :
     def __init__(self, browser, model, parent):
         super().__init__(parent)
+
         # Save reference to our browser window for use in itemClicked()
-        self.webview = browser
-        # flag used to prevent a recursion loop on dataChanged signal!
-        self.displaying = False
+        self.web_page = browser
+
         # connect to the concrete model whose contents we display
         self.setModel(model)
+
         # connect the model's dataChanged to our slot for it
         self.model().dataChanged.connect( self.dataChanged )
+
+        # flag used to prevent a recursion loop on dataChanged signal!
+        self.displaying = False
+
         # Set all the many properties of a ListView/AbstractItemView:
         #
         # Uniform item sizes
@@ -1283,76 +1290,95 @@ class CobroListView(QListView) :
     # To avoid a recursive loop we set a flag self.displaying. Also at this
     # time, copy new_hash (the hash value of the page we display) into
     # old_hash and make the status OLDCOMIC.
+
     def itemDisplay(self, index) :
         global COMICS, OLDCOMIC, NEWCOMIC, BADCOMIC, status_role
         global ERROR_MSG, UNREAD_MSG, READING_MSG
         self.displaying = True
         comic = COMICS[index.row()]
         # Tell the web page, whatever it's working on, stop it.
-        self.webview.page().triggerAction(QWebEnginePage.Stop)
+        self.web_page.stop_loading()
+
         if (comic.status == OLDCOMIC) or (comic.status == NEWCOMIC) :
             # i.e., not a bad comic or a working comic
             if comic.page :
                 # Pass the current page data into our web viewer.
-                self.webview.setHtml( comic.page, QUrl(comic.url) )
+                self.web_page.show_html( comic.page, QUrl(comic.url) )
                 # set the font to show it has been seen.
                 self.model().setData(index, OLDCOMIC, status_role)
                 comic.old_hash = comic.new_hash
             else :
                 # No page data has been read -- perhaps this is a new comic
                 # just added? Put up an explanation in the browser window.
-                self.webview.setHtml( UNREAD_MSG, QUrl() )
+                self.web_page.show_html( UNREAD_MSG, QUrl() )
         elif comic.status == BADCOMIC :
             # Comic had an error on the last refresh, put up an explanation
             # with error message in the browser window.
-            self.webview.setHtml( ERROR_MSG.format(comic.error, comic.url), QUrl() )
+            self.web_page.show_html( ERROR_MSG.format(comic.error, comic.url), QUrl() )
         else:
             # Comic is being refreshed, plead for more time
-            self.webview.setHtml( READING_MSG, QUrl() )
+            self.web_page.show_html( READING_MSG, QUrl() )
         self.displaying = False
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
-# Implement the web page display, based on QWebEngineView with added
-# behaviors where those are supported by the cruelly truncated abilities of
-# QWebEngine versus the old QWebPage. Initialize the display with
-# welcome/usage/license message.
+# Implement the web page display. The class CobroWebPage is a widget that
+# provides the display of a web page and the following functions:
+#
+# * Initialize the display with a given welcome/usage/license message.
+#
+# * Display a web page given HTML as a text string.
+#
+# * Stop the display (if ongoing).
+#
+# * Update of a given QLabel with the URL in progress while it is being
+#   loaded.
+#
+# * Update of a given QProgressBar with loading status of a page.
+#
+# * Change the title of our parent widget when the web page changes.
+#
+# * Support user function keys for back, forward, and zoom
+#   NOTE we are not able to trap keystrokes from QWebEngineView, the
+#   code is left in for possible future use.
 #
 
 class CobroWebPage(QWebEngineView) :
-    def __init__(self, status, bar, parent) :
-        global FONTLIST, OLDCOMIC, WELCOME_MSG
+    def __init__(self, status, bar, welcome, parent) :
+        global FONTLIST, OLDCOMIC
         # Initialize the root class, incidentally creating a QWebEnginePage
-        super(QWebEngineView,self).__init__(parent)
-        # Save access to the main window (our parent) and
-        # separately to its status line and progress bar widgets
+        super().__init__(parent)
+        # Save access to our parent widget; this reference is used to
+        # change the widget's title when the web page title changes.
         self.main = parent
+        # Save the status QLabel, we set it to the URL while loading.
         self.statusLine = status
+        # Save the QProgressBar we update while loading is ongoing.
         self.progressBar = bar
         # Set up a flag used while updating status, see startBar, rollBar below
         self.needUrlStatus = False
-        ## make page unmodifiable
-        #self.page().setContentEditable(False)
-        #logging.info('setting fonts to',qfi.family())
-        #self.settings().setFontFamily(QWebSettings.StandardFont, qfi.family())
-        #self.settings().setFontFamily(QWebSettings.SansSerifFont, qfi.family())
-        #self.settings().setFontFamily(QWebSettings.SerifFont, 'Palatino')
+        # Save the welcome message, to use when going "back" and there is
+        # no "back" URL in the stack.
+        self.welcome_msg = welcome
+        # Set the font parameters supported by the web display
         self.settings().setFontSize(QWebEngineSettings.DefaultFontSize, 16)
         self.settings().setFontSize(QWebEngineSettings.MinimumFontSize, 6)
         self.settings().setFontSize(QWebEngineSettings.MinimumLogicalFontSize, 6)
         # set focus policy so we get keypress events
         self.setFocusPolicy(Qt.StrongFocus)
-        # set our zoom factor which is changed by keys ctl-plus/minus
+        # Initialize our zoom factor which is changed by keys ctl-plus/minus
         self.ourZoomFactor = 1.0
         self.setZoomFactor(self.ourZoomFactor)
-        # Disable scripting! Well, actually, quite a few comics need j'script,
-        # including (darn it) the SMBC red button!
+        # Disable scripting! Well, actually, no; quite a few comics need
+        # j'script, including (darn it) the SMBC red button!
         self.settings().setAttribute(QWebEngineSettings.JavascriptEnabled, True)
-        # Connect the load progress signals to our slots below.
+        # QWebEngineView emits load progress signals; connect them to our
+        # slots where we update the progress bar.
         self.loadStarted.connect( self.startBar )
         self.loadProgress.connect( self.rollBar )
         self.loadFinished.connect( self.endBar )
-        # Connect the titleChanged signal to our slot.
+        # QWebEngineView emits the titleChanged signal on completion of the
+        # loading of the page. Connect it to our slot where update parent.
         self.titleChanged.connect( self.newTitle )
         # Set up constants for key values so as not to bog down the keypress event.
         #  - mask to turn off keypad indicator, making all plus/minus alike
@@ -1360,41 +1386,61 @@ class CobroWebPage(QWebEngineView) :
         #  - ctl-minus is the only unambiguous zoom key
         self.ctl_minus = Qt.ControlModifier | Qt.Key_Minus
         #  - list of all keys zoom-related
-        self.zoomKeys = [Qt.ControlModifier | Qt.Key_Minus,
+        self.zoomKeys = [   Qt.ControlModifier | Qt.Key_Minus,
                             Qt.ControlModifier | Qt.Key_Equal,
                             Qt.ControlModifier | Qt.Key_Plus,
-                            Qt.ShiftModifier | Qt.ControlModifier | Qt.Key_Equal,
-                            Qt.ShiftModifier | Qt.ControlModifier | Qt.Key_Plus ]
-        self.backKeys = [Qt.ControlModifier | Qt.Key_B,
+                            Qt.ShiftModifier   | Qt.ControlModifier | Qt.Key_Equal,
+                            Qt.ShiftModifier   | Qt.ControlModifier | Qt.Key_Plus
+                        ]
+        self.backKeys = [   Qt.ControlModifier | Qt.Key_B,
                             Qt.ControlModifier | Qt.Key_Left,
-                            Qt.ControlModifier | Qt.Key_BracketLeft]
+                            Qt.ControlModifier | Qt.Key_BracketLeft
+                        ]
         self.forwardKeys = [Qt.ControlModifier | Qt.Key_Right,
-                            Qt.ControlModifier | Qt.Key_BracketRight]
-        self.copyKeys = [Qt.ControlModifier | Qt.Key_C, Qt.Key_Copy ]
-        # Load a greeting message
-        self.setHtml(WELCOME_MSG)
+                            Qt.ControlModifier | Qt.Key_BracketRight
+                        ]
+        self.copyKeys = [   Qt.ControlModifier | Qt.Key_C, Qt.Key_Copy ]
+        # Load and display the greeting message
+        self.show_html( self.welcome_msg, QUrl() )
         ##### end of __init__
 
-    # Slot to receive the loadStarted signal: clear the bar to zero and show
-    # the url in the status line. Problem: at loadStarted time, self.url()
-    # returns the *previous* url, not the one actually being started. So to
-    # avoid looking like a doofus, set it when updating the bar.
+    # Our public method to display a string of HTML. Encapsulates
+    # QWebEngineView's setHtml().
+
+    def show_html( self, html_string: str, base_url: QUrl ) -> None :
+        self.setHtml( html_string, base_url )
+
+    # Our public method to stop the action of the browser. Encapsulates
+    # QWebEngineView.page().triggerAction(QWebEnginePage.Stop)
+
+    def stop_loading( self ) -> None :
+        self.page().triggerAction(QWebEnginePage.Stop)
+    # Slot to receive the loadStarted signal: clear the progress bar to zero
+    # and show the url in the status line.
+    #
+    # Problem: at loadStarted time, QWebEngineView.url() returns the
+    # *previous* url, not the one actually being started. So to avoid looking
+    # like a doofus, set the URL only while updating the bar.
+
     def startBar(self) :
         self.progressBar.reset()
         self.needUrlStatus = True
 
     # Slot to receive the loadProgress signal. Set the progress bar value.
     # Also set the URL in the status line, but only if it hasn't been set
-    # and only if we have some progress, otherwise it's the prior url.
+    # and only if we have some progress, otherwise it's still the prior url.
+
     def rollBar(self, progress) :
         self.progressBar.setValue(progress)
-        if self.needUrlStatus and progress > 10 :
-            self.statusLine.setText(self.url().toString())
+        if self.needUrlStatus and progress > 1 :
+            # OK, *NOW* we can get a valid URL from QWebEngineView.url()
+            self.statusLine.setText( 'loading: ' + self.url().toString() )
             self.needUrlStatus = False
 
     # Slot to receive the loadFinished signal. Clear the progress bar and
-    # status line, but if the argument is False, something went wrong with
-    # the page load.
+    # status line, but if the signal argument is False, something went wrong
+    # with the page load.
+
     def endBar(self, ok) :
         self.progressBar.reset()
         self.statusLine.clear()
@@ -1403,6 +1449,7 @@ class CobroWebPage(QWebEngineView) :
 
     # Slot to receive the titleChanged signal. Change the title of the
     # main window to match.
+
     def newTitle(self, qstitle):
         self.main.setWindowTitle(qstitle)
 
@@ -1411,42 +1458,51 @@ class CobroWebPage(QWebEngineView) :
     # * browser back on ctl-[, ctl-b, ctl-left
     # * browser forward on ctl-], ctl-right
     # * copy selected to clipboard on ctl-c
+    #
     # For the font size, we initialize the view at 16 points and the zoom
-    # factor at 1.0. Each time the user hits ctl-minus we deduct 0.0625 from
-    # the multiplier, and for each ctl-+ we add 0.0625 (1/16) to the
+    # factor at 1.0. Each time the user hits ctl-minus we deduct 0.0625
+    # (1/16th) from the multiplier. For each ctl-+ we add 0.0625 to the
     # multiplier. This ought to cause the view to change text sizes up or
-    # down by about one point and images by a bit. We set limits of 0.375 (6
+    # down by about one point, and images by a bit. We set limits of 0.375 (6
     # points) and 4.0 (64 points).
+
     def keyPressEvent(self, event):
-        global WELCOME_MSG
+
+        # Get the Qt key value from the event, OR it with its modifiers,
+        # except stripping out the keypad modifier, to produce a single
+        # integer we can quickly look up in self.zoomKeys/backKeys etc.
+
         kkey = int( int(event.modifiers()) & self.keypadDeModifier) | int(event.key() )
-        #print(kkey)#dbg
+        logging.DEBUG( 'key {:08X}'.format( kkey ) )
+
         if (kkey in self.zoomKeys) : # ctrl-plus/minus
             event.accept()
-            zfactor = 0.0625 # zoom in
+            zfactor = 0.0625 # assume zooming in?
             if (kkey == self.ctl_minus) :
-                zfactor = -zfactor # zoom out
+                zfactor = -zfactor # nope, zooming out
             zfactor += self.ourZoomFactor
             if (zfactor > 0.374) and (zfactor < 4.0) :
+                # not too big nor too small, save it & set it
                 self.ourZoomFactor = zfactor
                 self.setZoomFactor(self.ourZoomFactor)
-                #print('zoom',zfactor)#dbg
+                logging.DEBUG( 'zooming to {}'.format(zfactor) )
         elif (kkey in self.backKeys) :
             event.accept()
             if self.page().history().canGoBack() :
                 self.page().history().back()
             else:
-                self.setHtml(WELCOME_MSG)
+                # The welcome message is logically "back" of any comic URL
+                self.setHtml( self.welcome_msg )
         elif (kkey in self.forwardKeys) :
             event.accept()
             if self.page().history().canGoForward() :
                 self.page().history().forward()
         elif (kkey in self.copyKeys) :
             event.accept()
-            QApplication.clipboard().setText(self.selectedText())
+            QApplication.clipboard().setText( self.selectedText() )
         else: # not a key we support, so,
             event.ignore()
-        super(QWebEngineView,self).keyPressEvent(event)
+        super().keyPressEvent(event)
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -1459,6 +1515,8 @@ class CobroWebPage(QWebEngineView) :
 #
 class TheAppWindow(QMainWindow) :
     def __init__(self, settings, parent=None) :
+        global WELCOME_MSG
+
         super(QMainWindow,self).__init__(parent) #P2
         # Save the settings instance for use at shutdown (see below)
         self.settings = settings
@@ -1479,17 +1537,17 @@ class TheAppWindow(QMainWindow) :
         self.progressBar.setRange(0,100)
         self.progressBar.setOrientation ( Qt.Horizontal)
         self.progressBar.setTextVisible(False)
-        # Create the webrowser: a WebEngineView. The web view needs
-        # access to the progress and status bars so it can update them.
-        self.page = CobroWebPage(self.statusLine, self.progressBar, self)
-        # Create the List View, which needs access to the web view
-        # (to display a comic), and to the list model.
-        self.view =  CobroListView(self.page, self.model, self)
+        # Create the web page display. Give it access to the progress and
+        # status bars so it can update them and the welcome message.
+        self.web_page = CobroWebPage(self.statusLine, self.progressBar, WELCOME_MSG, self)
+        # Create the List View, which needs access to the web view to display
+        # a selected comic, and to the list model for its data.
+        self.view =  CobroListView(self.web_page, self.model, self)
         # Lay out our widget: the list on the left and webview on the right,
         # underneath it a status line and a progress bar.
         hb = QHBoxLayout() # hbox with list and webview
         hb.addWidget(self.view,0) # no stretch
-        hb.addWidget(self.page,1) # all available stretch
+        hb.addWidget(self.web_page,1) # all available stretch
         hb2 = QHBoxLayout() # hbox with status line and progress bar
         hb2.addWidget(self.statusLine,1) # all stretch
         hb2.addWidget(self.progressBar,0) # no stretch, squeezed to the right
@@ -1799,7 +1857,7 @@ class TheAppWindow(QMainWindow) :
     def closeEvent(self, event):
         global worker_waits
         # make sure the browser is in a clean state
-        self.page.page().triggerAction(QWebEnginePage.Stop)
+        self.web_page.stop_loading()
         # Tell the worker thread to shut down.
         self.worker.quit()
         if not self.settings_have_been_saved :
