@@ -559,8 +559,11 @@ class MyParser(HTMLParser):
         #  Gregor sometimes has a "data: image/png..." monster string,
         #  SMBC has a rotating ad under SMBC-hivemill, and something
         #   that changes under pixel.quantserve.com/pixel
+        #   also, sometimes injects ...smbc-comics.com/images/... and sometimes not
         #  Various have statcounters which can change
         #  Jesus and Mo has an old comic thumbnail that comes and goes
+        #  Extra Ordinary pulls a different comics/banners/<something>
+        #  HomeBased sometimes does and sometimes doesn't load "WebBanner3"
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
@@ -575,7 +578,10 @@ class MyParser(HTMLParser):
                             'data: ',
                             'statcounter',
                             'pixel.quantserve.com',
-                            '150x150'
+                            '150x150',
+                            'comics/banners',
+                            'smbc-comics.com/images/',
+                            'WebBanner3'
                             ]
     # This new method is called to read out the accumulated hash.
     def read_hash(self) :
