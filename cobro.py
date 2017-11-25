@@ -242,14 +242,14 @@ FONTLIST = [None, None, None, None]
 # using various browsers. Some webcomics will not talk to us unless we
 # present a valid user agent.
 
-# chrome agent as of 11 July 17
-CHROME_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
-# firefox agent as of 11 July 17
-FIREFOX_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:54.0) Gecko/20100101 Firefox/54.0'
+# chrome agent as of 27 Oct 17
+CHROME_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36'
+# firefox agent as of 27 Oct 17
+FIREFOX_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:56.0) Gecko/20100101 Firefox/56.0'
 # safari as of 11 July 17
 SAFARI_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/603.2.5 (KHTML, like Gecko) Version/10.1.1 Safari/603.2.5'
 
-USERAGENT = SAFARI_AGENT_STRING
+USERAGENT = FIREFOX_AGENT_STRING
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
@@ -339,6 +339,9 @@ its name turns <b>bold</b>. (Sometimes this only means a change in
 ad copy, blog post, or user comments.)</li>
 <li>If there was a problem reading it, its name is <strike>lined-out</strike>.
 Click on it to see the error message.</li>
+<li>If a comic always appears old and you know it has been updated, then probably
+its server has sussed us out as a robot of some kind. Alas, Ninja and Pirate thinks
+we are a web-scraper and always serves the same "I'm not a robot" page.</li>
 </ul>
 <p>Use File&gt;Refresh to refresh a new or edited comic, or to retry one with an error.
 When all refreshes are finished, you can rearrange the list order
@@ -551,8 +554,11 @@ class MyParser(HTMLParser):
         #  Savage Chickens injects random ads from its images directory,
         #     and sometimes varies the name of uploads/ebook*
         #  Ted Rall ends with a random number on cookies-for-comments,
-        #  sheldon inserts a random thumbnail of an old comic and so does
-        #  comics.com, so any image with "thumb" is junk,
+        #  sheldon inserts a random thumbnail of an old comic; and
+        #     LoadingArtist inserts random ..thumbs/.. so kill "thumb"
+        #     Unfortunately the only thing that changes on the front page
+        #     of "Elf and Warrior" is its collection of "...thumb_..." pngs,
+        #     so look explicitly for "thumb/" and "thumbs/" not just "thumb".
         #  assets.amuniversal.com is a random ad image,
         #  Tumblr based comics have random values in lines with "impixu?",
         #  Gregor and others have rotating ads from project wonderful,
@@ -570,7 +576,7 @@ class MyParser(HTMLParser):
                             'savagechickens.com/images',
                             'uploads/ebook',
                             'cookies-for-comments',
-                            'thumb',
+                            'thumb/', 'thumbs/',
                             'assets.amuniversal.com',
                             'impixu?',
                             'projectwonderful.com',
@@ -589,20 +595,23 @@ class MyParser(HTMLParser):
     # This overrides the standard method to examine any HTML tag
     # and hash the ones of interest.
     def handle_starttag(self, tag, attrs):
+        # if self.loggit : logging.info( 'tag {}'.format(tag) ) # super DBG
         # Only care about <img tags,
         if tag == 'img' :
             # look at the attributes for the src= attribute.
             for (attr,val) in attrs :
                 if attr == 'src' :
+                    if self.loggit : #DBG
+                        logging.info( '  parsing src: {}'.format(val) ) # DBG
                     # check for presence of blacklisted text element
                     for nono in self.blacklist :
                         if nono in val :
+                            if self.loggit : #DBG
+                                logging.info('  rejected for {}'.format(nono) ) #DBG
                             return # bad image, do not include in hash
                     # put the source URL in the hash and log it
-                    val = val.encode('utf-8','ignore')
-                    self.sha1.update(val)
-                    if self.loggit:
-                        logging.info('  hashing: %s', val)
+                    self.sha1.update( val.encode( 'utf-8', 'ignore' ) )
+                    if self.loggit : logging.info('  hashing: {}'.format(val) )
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -682,14 +691,14 @@ class WorkerBee ( QThread ) :
     # differ, tell the main thread to mark it NEWCOMIC -- else, OLDCOMIC.
 
     def process_one(self, ix) :
-        global read_url, OLDCOMIC, NEWCOMIC, BADCOMIC, WORKING
+        global OLDCOMIC, NEWCOMIC, BADCOMIC, WORKING
         global COMICS
         row = ix.row()
         self.statusChanged.emit( row, WORKING )
         comic = COMICS[row]
         # Read the comic page once and save it, no matter status
         if comic.loggit:
-            logging.info('Reading comic %s',comic.name)
+            logging.info( 'Reading comic {}'.format(comic.name) )
         page_text = self.read_url(comic)
         comic.page = page_text
         if 0 == len(page_text) :
@@ -746,13 +755,21 @@ class WorkerBee ( QThread ) :
                 ureq = urllib.request.Request(comic.url)
                 # The commercial sites (comics.com) reject us unless we
                 # show them a valid agent string.
-                ureq.add_header('User-agent', USERAGENT)
+                ureq.add_header( 'User-agent', USERAGENT )
                 # Blog-based sites reject us with 403 unless we have this:
-                ureq.add_header('Accept', 'text/html')
-                ## Create an SSL context that permits the "broken" SSLV3 which
-                ## is used by some comics notable Megacynics.com
-                #uctx = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
-                #uctx.options &= ~ssl.OP_NO_SSLv3
+                #ureq.add_header('Accept', 'text/html')
+                # Add a lot of headers to make us look more legit
+                ureq.add_header( 'Referer', 'http://yahoo.com' )
+                ureq.add_header( 'Request-Method', 'GET' )
+                ureq.add_header( 'Protocol-version', 'HTTP/1.1' )
+                ureq.add_header( 'Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' )
+                #ureq.add_header( 'Accept-Encoding', 'gzip,deflate' )
+                ureq.add_header( 'Accept-Language', 'en-FU,en;q=0.8' )
+                ureq.add_header( 'Cache-Control', 'no-cache' )
+                ureq.add_header( 'Connection', 'keep-alive' )
+                ureq.add_header( 'Max-Forwards', '10' )
+                ureq.add_header( 'DNT', '1' ) # oh do not track me
+                # go for it
                 logging.debug('opening %s', comic.url)
                 # Execute the request by opening it, creating a "file" to the page.
                 # Use a timeout to avoid hang-like conditions on slow sites.
@@ -773,8 +790,8 @@ class WorkerBee ( QThread ) :
             # contain a "charset" value.
             encoding = 'UTF-8'
             try:
-                header = furl.read(1024).decode(encoding, errors='ignore')
-                charset_match = self.charset_re.match(header)
+                header = furl.read(1040).decode(encoding, errors='ignore')
+                charset_match = self.charset_re.search(header)
                 if charset_match : # there was a hit on charset='encoding'
                     encoding = charset_match.group(2)
                 trailer = furl.read().decode(encoding,errors='replace')
@@ -1081,9 +1098,9 @@ class ConcreteListModel ( QAbstractListModel ) :
                 name = settings.value(u'name')
                 url = settings.value(u'url')
                 try:
-                    old_hash = settings.value(u'old_hash')
+                    old_hash = bytes( settings.value(u'old_hash') )
                 except:
-                    logging.ERROR('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
+                    logging.error('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
                 comic = Comic(name,url,old_hash,OLDCOMIC)
                 # Look to see if this comic wants logging. Implement an undocumented
                 # hack, "*" matches any.
@@ -1094,7 +1111,7 @@ class ConcreteListModel ( QAbstractListModel ) :
                 COMICS.append(comic)
                 logging.debug( 'read {0}: {1}'.format( i, name ) )
             except:
-                logging.ERROR('error reading comic {0}:{1}, comic skipped'.format(i,name))
+                logging.error('error reading comic {0}:{1}, comic skipped'.format(i,name))
         settings.endArray()
         settings.endGroup()
         self.endResetModel()
@@ -1349,6 +1366,13 @@ class CobroListView(QListView) :
 #   code is left in for possible future use.
 #
 
+#class CobroEnginePage(QWebEnginePage):
+    #def __init__(self,parent):
+        #super().__init__(parent)
+    #def javaScriptConsoleMessage( self, msglevel, msg, linenum, source ):
+        #print('javascript msg:',msg)
+        #pass
+
 class CobroWebPage(QWebEngineView) :
     def __init__(self, status, bar, welcome, parent) :
         global FONTLIST, OLDCOMIC
@@ -1366,10 +1390,19 @@ class CobroWebPage(QWebEngineView) :
         # Save the welcome message, to use when going "back" and there is
         # no "back" URL in the stack.
         self.welcome_msg = welcome
-        # Set the font parameters supported by the web display
+        ## Set our own WebEnginePage in place of the default
+        #self.setPage( CobroEnginePage(self) )
+        # Set the font parameters supported by the web display. Note that for
+        # QWebEngineView, self.settings() is, per the docs, equivalent to
+        # self.page().settings(), which is to say, our settings are the
+        # QWebEnginePage object's settings.
         self.settings().setFontSize(QWebEngineSettings.DefaultFontSize, 16)
         self.settings().setFontSize(QWebEngineSettings.MinimumFontSize, 6)
         self.settings().setFontSize(QWebEngineSettings.MinimumLogicalFontSize, 6)
+        # set some web page attributes different from the default
+        self.settings().setAttribute(QWebEngineSettings.JavascriptCanOpenWindows, False)
+        self.settings().setAttribute(QWebEngineSettings.JavascriptEnabled, False)
+        assert not( self.page().settings().testAttribute( QWebEngineSettings.JavascriptEnabled ) )
         # set focus policy so we get keypress events
         self.setFocusPolicy(Qt.StrongFocus)
         # Initialize our zoom factor which is changed by keys ctl-plus/minus
@@ -1386,6 +1419,7 @@ class CobroWebPage(QWebEngineView) :
         # QWebEngineView emits the titleChanged signal on completion of the
         # loading of the page. Connect it to our slot where update parent.
         self.titleChanged.connect( self.newTitle )
+
         # Set up constants for key values so as not to bog down the keypress event.
         #  - mask to turn off keypad indicator, making all plus/minus alike
         self.keypadDeModifier = int(0xffffffff ^ Qt.KeypadModifier)
