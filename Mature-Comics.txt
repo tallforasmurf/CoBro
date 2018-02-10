@@ -1,27 +1,23 @@
-# A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
-# comic is defined on a single line by two quoted strings.
+
+# A comic file is a UTF-8 text file (because some comic names have non-Latin-1 characters).
+# In it, each comic is defined on a single line by two quoted strings.
 # The first string is the comic name. The second string is its URL.
 # Example: 'Bug Comic', 'http://www.bugcomic.com'
-# The strings are delimited by 'single' or "double" quotes (sorry no guillemets)
-# and separated by spaces and/or commas. All lines that don't match
+# The strings are delimited by 'single' or "double" quotes or «guillemets»,
+# and separated by spaces and/or commas. Any lines that do NOT match
 # that format are ignored, and can be used as commentary, like these lines.
 
 * The following comics, although they are some of the funniest things on
 * the internet, are frequently explicit about adult subjects and language.
 
-'A Multiverse', 'http://amultiverse.com/'
-'ChuckleADuck', 'http://chuckleaduck.com/'
 'Cy & H', 'http://www.explosm.net/comics/'
 'Dinosaur Comics', 'http://www.qwantz.com/index.php'
-'Doghouse Diaries', 'http://thedoghousediaries.com/'
 'Jesus and Mo', 'http://www.jesusandmo.net/', '-------'
-'PhD Comics', 'http://www.phdcomics.com/comics.php'
 'Questionable Content', 'http://questionablecontent.net/'
 'Sinfest', 'http://www.sinfest.net/'
 'SMBC', 'http://www.smbc-comics.com/'
 'Toothpaste For Dinner', 'http://www.toothpastefordinner.com/'
 'Buttersafe', 'http://buttersafe.com'
-'Extra Ordinary', 'http://www.exocomics.com'
 'Dork Toes', 'http://dorktoescomic.com/'
 # note apostrophe in "Fredo and Pid'Jin" is a big no-no!!!
 'Fredo and Pidjin', 'http://www.pidjin.net/'

@@ -1,0 +1,52 @@
+
+# A comic file is a UTF-8 text file (because some comic names have non-Latin-1 characters).
+# In it, each comic is defined on a single line by two quoted strings.
+# The first string is the comic name. The second string is its URL.
+# Example: 'Bug Comic', 'http://www.bugcomic.com'
+# The strings are delimited by 'single' or "double" quotes or «guillemets»,
+# and separated by spaces and/or commas. Any lines that do NOT match
+# that format are ignored, and can be used as commentary, like these lines.
+
+"Stand Still Stay Silent", "http://sssscomic.com/comic.php"
+"XKCD", "http://xkcd.com"
+"Questionable Content", "http://questionablecontent.net/"
+"Bug Comic", "http://www.bugmartini.com/"
+"SMBC", "http://www.smbc-comics.com/"
+"Girls with Slingshots", "http://www.girlswithslingshots.com/"
+"Gunnerkrigg Court", "http://gunnerkrigg.com"
+"Cy & H", "http://www.explosm.net/comics/"
+"User Friendly", "http://userfriendly.org"
+"Savage Chickens", "http://www.savagechickens.com/"
+"Sinfest", "http://www.sinfest.net/"
+"Get Fuzzy", "http://www.gocomics.com/getfuzzy?ref=comics"
+"Dinosaur Comics", "http://www.qwantz.com/index.php"
+"Basic Instructions", "http://basicinstructions.net"
+"lonnie millsap", "http://www.lonniemillsap.com/"
+"Megacynics", "http://www.megacynics.com/"
+"home based", "http://www.homebasedcomic.com/"
+"owlturd", "http://owlturd.com/search/COMIC"
+"Dork Toes", "http://dorktoescomic.com/"
+"Ninja and Pirate", "http://ninjaandpirate.com"
+"Sheldon", "http://sheldoncomics.com"
+"st.beals", "http://www.stbeals.com/"
+"Drive", "http://drivecomic.com"
+"Randie and Ryan", "http://randieandryan.com"
+"falseknees", "http://falseknees.com/"
+"luyi draws", "http://luyidraws.tumblr.com/"
+"poorly drawn lines", "http://www.poorlydrawnlines.com/"
+"port sherry", "http://portsherry.com/"
+"Jesus and Mo", "http://jesusandmo.net"
+"Squid Row", "http://www.squidrowcomics.com/"
+"Scurry", "http://www.scurrycomic.com/scurry-comic"
+"Loadingartist", "http://www.loadingartist.com/latest"
+"Extra Ordinary", "http://www.exocomics.com/"
+"Lit Brick", "http://litbrick.com/comic.php"
+"ubertool", "http://ubertoolcomic.com/"
+"The Middle Age", "http://www.gocomics.com/the-middle-age"
+"elf and warrior", "http://www.webtoons.com/en/fantasy/elf-and-warrior/list?title_no=908"
+"32", "http://stuckat32.com/"
+"PhD Comics", "http://www.phdcomics.com/comics.php"
+"Tree Lobsters", "http://www.treelobsters.com/"
+"Vagabond Starlight", "http://vagabondstarlight.com"
+"Trout Cave", "http://troutcave.net/index.php"
+"magnificatz", "http://magnificatz.com/"

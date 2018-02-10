@@ -1,13 +1,14 @@
-# A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
-# comic is defined on a single line by two quoted strings.
+
+# A comic file is a UTF-8 text file (because some comic names have non-Latin-1 characters).
+# In it, each comic is defined on a single line by two quoted strings.
 # The first string is the comic name. The second string is its URL.
 # Example: 'Bug Comic', 'http://www.bugcomic.com'
-# The strings are delimited by 'single' or "double" quotes (sorry no guillemets)
-# and separated by spaces and/or commas. All lines that don't match
+# The strings are delimited by 'single' or "double" quotes or «guillemets»,
+# and separated by spaces and/or commas. Any lines that do NOT match
 # that format are ignored, and can be used as commentary, like these lines.
 
 * the following are usually suitable for sub-teen readers. 
-* several, e.g. Agnes, Stone Soup, are major comics with newspaper distribution
+* several, e.g. Agnes, Stone Soup, are syndicated comics with newspaper distribution
 
 'Agnes', 'http://comics.com/agnes/'
 'Bug Comic', 'http://www.bugmartini.com/'
@@ -19,6 +20,7 @@
 'Squid Row', 'http://squidrowcomics.com'
 "home based", "http://www.homebasedcomic.com/"
 "Sheldon", "http://sheldoncomics.com"
+'Extra Ordinary', 'http://www.exocomics.com'
 
 * The following are long-running graphic novels. You need to read the
 * whole backstory in the archives, then use CoBro to stay up to date.
