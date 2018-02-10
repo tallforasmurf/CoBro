@@ -305,32 +305,33 @@ WELCOME_MSG = '''
 <h2>Welcome to CoBro!</h2>
 <p style='font-size:smaller;'>Version 2.0.0 18 March 2014</p>
 </div>
-<p>Single-click a comic name to display its page in this browser.</p>
+<p>Single-click a comic name in the list to the left!
+That will display it in this browser!</p>
 <p>No comics in the list? Use File&gt;New Comic
 to add a comic by name and URL.
-Start by adding some of these nerd favorites!
-Drag to select one the URLs;
+Start by adding some nerd favorites!
+Drag to select the text of one of these URLs;
 then key ctl-c or right-click to copy (mac: cmd-c or ctl-click);
-then select File&gt;New Comic, and fill in its name.</p>
+then select File&gt;New Comic, and fill in the form.</p>
 <table style='border-collapse:collapse; width:80%;margin:auto;'>
 <tr><td>Comic name</td><td>Comic URL</td></tr>
 <tr><td>XKCD</td><td>http://xkcd.com/</td></tr>
 <tr><td>Bug Comic</td><td>http://www.bugcomic.com</td></tr>
-<tr><td>PhD Comics</td><td>http://www.phdcomics.com/comics.php</td></tr>
 <tr><td>Megacynics</td><td>http://www.megacynics.com/</td></tr>
 <tr><td>Sheldon!</td><td>http://www.sheldoncomics.com/</td></tr>
-<tr><td>Foxtrot</td><td>http://www.foxtrot.com/</td></tr>
+<tr><td>Dinosaur Comics</td><td>http://www.qwantz.com/index.php</td></tr>
 </table>
 <p>That's enough! There are <i>thousands</i> of web comics out there!
 The ones above are of the daily-joke variety, but there comics at
 every level of style and subject up to the
 richly-drawn graphic novels like <a href='http://www.sssscomic.com/'>Stand Still Stay Silent</a>
-or <a href='http://romanticallyapocalyptic.com/'>Romantically Apocalyptic</a>.
+or <a href='http://girlgeniusonline.com/comic.php'>Girl Genius</a>.
 For U.S. syndicated (newspaper) cartoons, try
-<a href='http://comics.com/'>Comics.com</a> or check the website of your
-regional newspaper under "Entertainment". For independent comics, try
-<a href='http://thehiveworks.com/'>Hiveworks</a> or <a href='http://new.belfrycomics.net/'>The
-Belfry</a> list.</p>
+<a href='http://comics.com/'>Comics.com</a>, or check the website of your
+regional newspaper under "Entertainment". For independent comics,
+<a href='https://www.comic-rocket.com/'>The Comic Rocket</a> and
+<a href='http://new.belfrycomics.net/'>The Belfry</a>
+are searchable indexes of hundreds of comics.</p>
 <p>To "refresh" a comic means to read its web page and see if it is
 different from the last time. All comics are refreshed when the app starts!</p>
 <ul><li>While we are reading its page, a comic's name is <i>italic</i>.</li>
@@ -345,17 +346,17 @@ we are a web-scraper and always serves the same "I'm not a robot" page.</li>
 </ul>
 <p>Use File&gt;Refresh to refresh a new or edited comic, or to retry one with an error.
 When all refreshes are finished, you can rearrange the list order
-by dragging and dropping. Double-click a comic
+by dragging the names. Double-click a comic in the list
 to edit its name and URL.</p>
-<p>While browsing, use ctl-[ for "back" and ctl-] for "forward"
-(cmd-[ and cmd-] on a mac).</p>
-<p>When you quit the app, it saves the
+<p>While browsing, control-click or right-click on this window for a
+context menu for navigating back or copying a link.</p>
+<p>When you quit the app, it saves the list of
 comic definitions in some magic settings place
 (Windows: Registry, Mac: Library/Preferences, Linux: ~/.config).</p>
 <p>Use File&gt;Export to write definitions of the selected comics to a UTF-8 text file.
-Use File&gt;Import to read definitions from a UTF-8 text file and add them to the list
-(or to replace them, when the name's the same). For the import file format,
-export one comic and look at that output.</p>
+Use File&gt;Import to read definitions from a file and add them to the list
+(or to replace them, when the name's the same). To learn the import file format,
+export one comic and look at that output!</p>
 <p>The list font is of course <a href='http://www.sheldoncomics.com/archive/070511.html'>Comic Sans</a>.
 That's it! Enjoy! Oh wait -- read the license!</p>
 <hr /><p>License (GPL-3.0):
@@ -367,7 +368,8 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 You can find a copy of the GNU General Public License at:
-<a href='http://www.gnu.org/licenses/'>www.gnu.org/licenses/</a>.</p>
+<a href='http://www.gnu.org/licenses/'>www.gnu.org/licenses/</a>.
+(Also: here's the <a href='https://github.com/tallforasmurf/CoBro'>source code</a>!)</p>
 </div>'''
 
 #
@@ -405,13 +407,14 @@ READING_MSG = '''
 #
 
 EXPORTBUMF = '''
-# A comic file is a latin-1 (ISO-8892-1) or ASCII file. In it, each
-# comic is defined on a single line by two quoted strings.
+# A comic file is a UTF-8 text file (because some comic names have non-Latin-1 characters).
+# In it, each comic is defined on a single line by two quoted strings.
 # The first string is the comic name. The second string is its URL.
 # Example: 'Bug Comic', 'http://www.bugcomic.com'
-# The strings are delimited by 'single' or "double" quotes or
-# guillemets, and separated by spaces and/or commas. Any lines that do not match
+# The strings are delimited by 'single' or "double" quotes or «guillemets»,
+# and separated by spaces and/or commas. Any lines that do NOT match
 # that format are ignored, and can be used as commentary, like these lines.
+
 '''
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -1092,12 +1095,13 @@ class ConcreteListModel ( QAbstractListModel ) :
         for i in range(count) :
             name = '?'
             url = '?'
-            old_hash = b'\xde\xad\xbe\xef'
+            old_hash = b'\x00'*20
             try:
                 settings.setArrayIndex(i)
                 name = settings.value(u'name')
                 url = settings.value(u'url')
                 try:
+                    DBG = settings.value(u'old_hash')
                     old_hash = bytes( settings.value(u'old_hash') )
                 except:
                     logging.error('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
