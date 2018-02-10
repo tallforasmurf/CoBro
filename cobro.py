@@ -1,5 +1,5 @@
 # le passe-partout (boilerplate)
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 __author__  = "David Cortesi"
 __copyright__ = "Copyright 2012, 2013, 2014 David Cortesi"
 __maintainer__ = "who indeed"
