@@ -10,6 +10,7 @@
 * the following are usually suitable for sub-teen readers. 
 * several, e.g. Agnes, Stone Soup, are syndicated comics with newspaper distribution
 
+'Bird and Moon', 'http://www.birdandmoon.com/'
 'Agnes', 'http://comics.com/agnes/'
 'Bug Comic', 'http://www.bugmartini.com/'
 'Candorville', 'http://candorville.com/'
