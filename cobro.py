@@ -171,6 +171,8 @@ import os # getcwd
 import io # stringIO
 import datetime # for now
 from html.parser import HTMLParser # see MyParser below
+# fake_useragent is a dependency
+from fake_useragent import UserAgent
 
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -238,18 +240,12 @@ WORKING = 3  # status while reading a url (name in italic)
 
 FONTLIST = [None, None, None, None]
 
-# A valid user agent string, as returned by whatsmyuseragent.com when visited
-# using various browsers. Some webcomics will not talk to us unless we
-# present a valid user agent.
+# A valid user agent string. Some webcomics will not talk to us unless we
+# present a valid user agent. We use the excellent fake_useragent module,
+# see pypi or https://github.com/hellysmile/fake-useragent
 
-# chrome agent as of 27 Oct 17
-CHROME_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36'
-# firefox agent as of 27 Oct 17
-FIREFOX_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:56.0) Gecko/20100101 Firefox/56.0'
-# safari as of 11 July 17
-SAFARI_AGENT_STRING = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/603.2.5 (KHTML, like Gecko) Version/10.1.1 Safari/603.2.5'
-
-USERAGENT = FIREFOX_AGENT_STRING
+user_agent_database = UserAgent()
+USERAGENT = user_agent_database.chrome # or .firefox or .safari, etc.
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
@@ -303,7 +299,7 @@ WELCOME_MSG = '''
 <div style='font-family:Comic Sans MS,Comic Sans,sans-serif;'>
 <div style='text-align:center; height:6em; background-color:#666; color:#F0F; border:2px solid black;'>
 <h2>Welcome to CoBro!</h2>
-<p style='font-size:smaller;'>Version 2.0.0 18 March 2014</p>
+<p style='font-size:smaller;'>Version 2.0.1 8 February 2018</p>
 </div>
 <p>Single-click a comic name in the list to the left!
 That will display it in this browser!</p>
@@ -549,7 +545,8 @@ class MyParser(HTMLParser):
         self.loggit = loggit
         # The blacklist contains strings that are present in images that
         # change without any relation to new content in the actual comic.
-
+        #    **TODO** move these to settings, and provide UI access
+        #      to create additional ones without code updates!
         #  in A Multiverse, images/goat-xxxx changes randomly,
         #  in comics that use yahoo for analytics, yahoo.com/visit.gif
         #     has a random argument,
@@ -573,6 +570,10 @@ class MyParser(HTMLParser):
         #  Jesus and Mo has an old comic thumbnail that comes and goes
         #  Extra Ordinary pulls a different comics/banners/<something>
         #  HomeBased sometimes does and sometimes doesn't load "WebBanner3"
+        #  amuniversal, aka comics.com, inserts changing images from other
+        #    comics from a folder "recommendation_images"
+        # smackjeeves loads random images from "/avatars/"
+
         self.blacklist = ['images/goat',
                             'webhosting.yahoo',
                             'gravatar',
@@ -590,7 +591,9 @@ class MyParser(HTMLParser):
                             '150x150',
                             'comics/banners',
                             'smbc-comics.com/images/',
-                            'WebBanner3'
+                            'WebBanner3',
+                            'recommendation_images',
+                            '/avatars/'
                             ]
     # This new method is called to read out the accumulated hash.
     def read_hash(self) :
@@ -612,9 +615,22 @@ class MyParser(HTMLParser):
                             if self.loggit : #DBG
                                 logging.info('  rejected for {}'.format(nono) ) #DBG
                             return # bad image, do not include in hash
-                    # put the source URL in the hash and log it
-                    self.sha1.update( val.encode( 'utf-8', 'ignore' ) )
+                    # put the source URL in the hash and log it. But first:
+                    # the comic hosting site smackjeeves.com loads the
+                    # identical images, sometimes as http://www.smackjeeves
+                    # and sometimes as http://img3.smackjeeves. Why? Who
+                    # knows? But it causes false positives. So normalize
+                    # "/img3." to "/www."
+                    val = val.replace('/img3.','/www.')
+                    # Also smackjeeves sometimes gives the comic image as a
+                    # full URL starting with 'http://' and sometimes just
+                    # starts with the 'www.' Or 'img3.' Fuckers.
+                    if val.startswith('http') :
+                        val = val.replace('http://','')
+                        val = val.replace('https://','')
+                    val = val.encode( 'utf-8', 'ignore' )
                     if self.loggit : logging.info('  hashing: {}'.format(val) )
+                    self.sha1.update( val )
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -760,12 +776,13 @@ class WorkerBee ( QThread ) :
                 # show them a valid agent string.
                 ureq.add_header( 'User-agent', USERAGENT )
                 # Blog-based sites reject us with 403 unless we have this:
-                #ureq.add_header('Accept', 'text/html')
                 # Add a lot of headers to make us look more legit
                 ureq.add_header( 'Referer', 'http://yahoo.com' )
                 ureq.add_header( 'Request-Method', 'GET' )
                 ureq.add_header( 'Protocol-version', 'HTTP/1.1' )
-                ureq.add_header( 'Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' )
+                #ureq.add_header( 'Accept', 'text/html' )
+                #ureq.add_header( 'Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' )
+                ureq.add_header( 'Accept', 'text/html,application/xhtml+xml,application/xml' )
                 #ureq.add_header( 'Accept-Encoding', 'gzip,deflate' )
                 ureq.add_header( 'Accept-Language', 'en-FU,en;q=0.8' )
                 ureq.add_header( 'Cache-Control', 'no-cache' )
