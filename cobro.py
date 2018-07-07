@@ -179,6 +179,7 @@ from PyQt5.QtWidgets import (
     QAction,
     QApplication,
     QDialog,
+    QInputDialog,
     QDialogButtonBox,
     QErrorMessage,
     QFileDialog,
@@ -245,8 +246,8 @@ FONTLIST = [None, None, None, None]
 # see pypi or https://github.com/hellysmile/fake-useragent
 
 user_agent_database = UserAgent()
-USERAGENT = user_agent_database.chrome # or .firefox or .safari, etc.
-
+USERAGENT = user_agent_database.firefox # or .chrome or .safari, etc.
+#USERAGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36'
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
 # Find out the nearest font to Comic Sans and store four versions of it in
@@ -498,6 +499,184 @@ COMICS = [] # list of Comic objects
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #
+# The following class contains and manages the database of "blacklist"
+# strings. These are strings that are (hopefully) unique to image URLs that
+# can change from within a comic web page, even when the main comic image has
+# not changed.
+#
+# The class is initialized at startup from the settings. It saves the list of
+# strings to the settings at shutdown. And it presents the list for editing
+# to the user when requested by a File menu action.
+#
+# NOTE: an example of why false positives are hard to eliminate -- and the
+# URL blacklist is not a perfect solution -- is the comic
+# romanticallyapocalyptic.com, which loads dozens of things from
+# subdirectories, .../imgs or .../flags or .../badges, and not in the same
+# order each time. Because order matters when composing a hash, the same
+# things loaded in different order will make a mismatched hash. One way
+# to fix this comic would be to ignore all img tags except for one from the
+# subdirectory .../art/..., but this would require a positive test, not a negative
+# filter, and a regex at that. Alternatively change the whole hashing process
+# to collect URLs in a set and sort them before hashing them.
+
+
+# The blacklist contains strings that are present in images that
+# change without any relation to new content in the actual comic.
+
+class BlackList(object):
+    def __init__(self, settings:QSettings) ->None:
+        '''
+        Initialize the blacklist, from the settings if the list is there,
+        otherwise (first time) from a known list.
+
+        The actual list contains tuples of (target,test). Each target is '*'
+        (or null) or else some fragment of a comic name, for example "jesus"
+        would match "Jesus and Mo". Each test is a string value that, if it
+        appears in a URL, makes the URL bad.
+        '''
+        self.blacks = []
+        settings.beginGroup(u'blacklist')
+        count = settings.beginReadArray(u'blackitems')
+
+        if count:
+            # there are items in the settings, read and store them.
+            logging.debug( 'reading blacklist' )
+            for i in range(count):
+                settings.setArrayIndex(i)
+                target = settings.value('target')
+                test = settings.value('test')
+                self.blacks.append( (target, test) )
+                logging.debug( '{}, {}:{}'.format( i, target,test ) )
+            logging.debug( '  read {} items'.format(i) )
+        else:
+            # no saved items in settings, initialize list of our own.
+            self.default_list()
+
+        settings.endArray()
+        settings.endGroup()
+
+        pass
+
+    def is_a_bad_url(self, comic_name: str, url: str) ->bool :
+        '''
+        On request from a MyParser (below), test a url against
+        the blacklist. Return True if the URL is not to be hashed.
+        '''
+        for (target, test) in self.blacks:
+            if (target=='*') or (target=='') \
+            or (target.lower() in comic_name.lower() ) :
+                if test in url:
+                    return True
+        return False
+
+    def edit_list(self,parent) ->None :
+        '''
+        Open a new modal window displaying the current blacklist as
+        a plain text. Allow the user to edit it ad.lib. When the user
+        clicks "OK", parse the list and store it.
+        '''
+        in_string = '\n'.join(
+            [ '{} = {}'.format(a,b) for (a,b) in self.blacks ]
+            )
+        (out_string,success) = QInputDialog.getMultiLineText(
+            parent,
+            'Edit URL blacklist',
+            'target = test where target is in a comic name and test is in a bad URL',
+            in_string
+            )
+        if success : # dialog was accepted with OK button
+            self.blacks = []
+            for item in out_string.split('\n'):
+                (target,test) = item.split('=')
+                self.blacks.append( ( target.strip(), test.strip() ) )
+
+    def save(self, settings:QSettings) ->None :
+        '''
+        Called during shutdown, save the current blacklist into the
+        settings object for use next time.
+        '''
+        settings.beginGroup(u'blacklist')
+        settings.remove('')
+        settings.endGroup()
+        settings.sync() # not supposed to be needed but does no harm
+        settings.beginGroup(u'blacklist')
+        settings.beginWriteArray(u'blackitems')
+        i = 0 # in case self.blacks is empty!
+        logging.debug('saving blacklist')
+        for i, (target, test) in enumerate(self.blacks) :
+            logging.debug( '   {}, {}:{}'.format(i, target, test) )
+            settings.setArrayIndex(i)
+            settings.setValue( u'target', target)
+            settings.setValue( u'test', test)
+        settings.endArray()
+        settings.endGroup()
+        settings.sync() # not supposed to be needed but does no harm
+        logging.debug( 'saved {} blacklist items'.format(i) )
+
+    def default_list(self) :
+        '''
+        The settings contain no blacklist items. Set self.blacks to a known
+        set of common problems.
+        '''
+        #  * anything Facebook is not a comic image
+        self.blacks.append( ('*','Facebook') )
+        #  * Jesus and Mo inserts a random png named ...150x150...
+        self.blacks.append( ('Jesus','150x150') )
+        #  * Gunnerkrig Court loads tons of stuff from /images but only
+        #    the item from /comics matters.
+        self.blacks.append( ('gunnerk', 'images/') )
+        #  * in A Multiverse, images/goat-xxxx changes randomly.
+        self.blacks.append( ('Multiverse','images/goat') )
+        #  * in comics that use yahoo for analytics, yahoo.com/visit.gif
+        #     has a random argument.
+        self.blacks.append( ('*', 'webhosting.yahoo') )
+        #  * some comics load different gravatars for no obvious reason.
+        self.blacks.append( ('*', 'gravatar') )
+        #  * Savage Chickens injects random ads from its images directory,
+        #     and sometimes varies the name of uploads/ebook*.
+        self.blacks.append( ('Savage', 'savagechickens.com/images') )
+        self.blacks.append( ('Savage', 'uploads/ebook') )
+        #  * Ted Rall ends with a random number of cookies-for-comments.
+        self.blacks.append( ('Rall', 'cookies-for-comments') )
+        #  * sheldon inserts a random thumbnail of an old comic. Also
+        #    LoadingArtist inserts random ..thumbs/.. -- unfortunately
+        #    the only thing that DOES change on the front page of "Elf and Warrior"
+        #    is its "...thumb..." pngs, so look explicitly for 'thumb' as
+        #    a directory name, with a slash.
+        self.blacks.append( ('sheldon', 'thumb/') )
+        self.blacks.append( ('sheldon', 'thumbs/') )
+        self.blacks.append( ('loading', 'thumb/') )
+        self.blacks.append( ('loading', 'thumbs/') )
+        #  * assets.amuniversal.com is a random ad image
+        self.blacks.append( ('*', 'assets.amuniversal.com') )
+        #  * Tumblr based comics have random values in lines with "impixu?".
+        self.blacks.append( ('*', 'impixu?') )
+        #  * Gregor and others have rotating ads from project wonderful.
+        self.blacks.append( ('*', 'projectwonderful.com') )
+        #  * Gregor sometimes has a "data: image/png..." monster string.
+        self.blacks.append( ('gregor', 'data: ') )
+        #  * SMBC has a rotating ad under SMBC-hivemill, and something
+        #    that changes under pixel.quantserve.com/pixel,
+        #    and sometimes injects ...smbc-comics.com/images/...
+        self.blacks.append( ('SMBC', 'SMBC-hivemill') )
+        self.blacks.append( ('SMBC', 'pixel.quantserve.com') )
+        self.blacks.append( ('SMBC', 'smbc-comics.com/images/') )
+        #  * Various have statcounters which can change.
+        self.blacks.append( ('*', 'statcounter') )
+        #  * Extra Ordinary pulls a different comics/banners/<something>
+        self.blacks.append( ('*', 'comics/banners') )
+        #  * HomeBased sometimes does and sometimes doesn't load "WebBanner3"
+        self.blacks.append( ('based', 'WebBanner3') )
+        #  * amuniversal, aka comics.com, inserts changing images from other
+        #    comics from a folder "recommendation_images"
+        self.blacks.append( ('*','recommendation_images') )
+        #  * smackjeeves, probably others, load random "/avatars/"
+        self.blacks.append( ('*','/avatars/') )
+
+BLACKLIST = None # type BlackList
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#
 # This is how we make a hash signature of a comic web page. Instead of
 # hashing the whole HTML text of the page, we only hash the src='' values
 # of the <img statements in it, assuming that these should not change
@@ -508,129 +687,55 @@ COMICS = [] # list of Comic objects
 # object to use and a flag indicating if the hash process is to be logged.
 #
 # The parser is applied to the text read from a comic's page. The parser
-# calls the handle_starttag() method for every tag it finds. In this parser,
-# only <img start tags are looked at. The src= attribute is pushed into the
-# hasher. Thus the hash is built on image urls only. The idea is that when
-# this hash is the same as the prior time the comic was read, the comic has
-# not changed. When the hash is different, the comic is presumed new.
+# calls the method handle_starttag() for every tag it finds. In that method,
+# all start tags except <img are ignored. The src= attribute of each <img is
+# pushed into the hasher. Thus the hash is built on image urls only. The idea
+# is that when this hash is the same as the prior time the comic was read,
+# the comic has not changed. When the hash is different, the comic is
+# presumed new.
 #
-# To simply hash the whole page gets false positives since some comics have
-# for example, random-comic links that change on every read, comments
+# To simply hash the whole page would get false positives since some comics
+# have for example, random-comic links that change on every read, comments
 # documenting the number of SQL queries to generate, user forums, constantly
-# changing store displays, etc etc etc. Hashing only the src= attributes
+# changing store displays, etc etc etc. Hashing only the <img src= URLs
 # eliminated many false positives, but not all.
 #
 # To eliminate more, we skip src strings that contain substrings from a
 # blacklist. This allows skipping certain images that are known from
-# experience to change often independently from the actual comic. This
-# reduces the number of false positives, but some still occur.
-#
-# NOTE: at some future time we might work out some kind of UI for the
-# blacklist so it could be updated by the user instead of being coded-in.
-#
-# NOTE: an example of why false positives are hard to eliminate is the comic
-# romanticallyapocalyptic.com, which loads dozens of things from
-# subdirectories, .../imgs or .../flags or .../badges, and not in the same
-# order each time. Because order matters when composing a hash, the same
-# things loaded in different order will make a mismatched hash. The only way
-# to fix this comic would be to ignore all img tags except for one from the
-# subdirectory .../art/... This would require a positive test, not a negative
-# filter, and a regex at that.
+# experience to change independently from the actual comic. The blacklist
+# of bad URLs is maintained in the settings and can be modified by the user.
 #
 
 class MyParser(HTMLParser):
-    def __init__( self, sha1, loggit=False ) :
+    def __init__( self, sha1, comic_name, loggit=False ) :
         HTMLParser.__init__(self)
         self.sha1 = sha1
         self.loggit = loggit
-        # The blacklist contains strings that are present in images that
-        # change without any relation to new content in the actual comic.
-        #    **TODO** move these to settings, and provide UI access
-        #      to create additional ones without code updates!
-        #  in A Multiverse, images/goat-xxxx changes randomly,
-        #  in comics that use yahoo for analytics, yahoo.com/visit.gif
-        #     has a random argument,
-        #  some comics load different gravatars for no obvious reason,
-        #  Savage Chickens injects random ads from its images directory,
-        #     and sometimes varies the name of uploads/ebook*
-        #  Ted Rall ends with a random number on cookies-for-comments,
-        #  sheldon inserts a random thumbnail of an old comic; and
-        #     LoadingArtist inserts random ..thumbs/.. so kill "thumb"
-        #     Unfortunately the only thing that changes on the front page
-        #     of "Elf and Warrior" is its collection of "...thumb_..." pngs,
-        #     so look explicitly for "thumb/" and "thumbs/" not just "thumb".
-        #  assets.amuniversal.com is a random ad image,
-        #  Tumblr based comics have random values in lines with "impixu?",
-        #  Gregor and others have rotating ads from project wonderful,
-        #  Gregor sometimes has a "data: image/png..." monster string,
-        #  SMBC has a rotating ad under SMBC-hivemill, and something
-        #   that changes under pixel.quantserve.com/pixel
-        #   also, sometimes injects ...smbc-comics.com/images/... and sometimes not
-        #  Various have statcounters which can change
-        #  Jesus and Mo has an old comic thumbnail that comes and goes
-        #  Extra Ordinary pulls a different comics/banners/<something>
-        #  HomeBased sometimes does and sometimes doesn't load "WebBanner3"
-        #  amuniversal, aka comics.com, inserts changing images from other
-        #    comics from a folder "recommendation_images"
-        # smackjeeves loads random images from "/avatars/"
+        self.comic_name = comic_name
 
-        self.blacklist = ['images/goat',
-                            'webhosting.yahoo',
-                            'gravatar',
-                            'savagechickens.com/images',
-                            'uploads/ebook',
-                            'cookies-for-comments',
-                            'thumb/', 'thumbs/',
-                            'assets.amuniversal.com',
-                            'impixu?',
-                            'projectwonderful.com',
-                            'SMBC-hivemill',
-                            'data: ',
-                            'statcounter',
-                            'pixel.quantserve.com',
-                            '150x150',
-                            'comics/banners',
-                            'smbc-comics.com/images/',
-                            'WebBanner3',
-                            'recommendation_images',
-                            '/avatars/'
-                            ]
     # This new method is called to read out the accumulated hash.
     def read_hash(self) :
         return bytes(self.sha1.digest())
+
     # This overrides the standard method to examine any HTML tag
     # and hash the ones of interest.
     def handle_starttag(self, tag, attrs):
-        # if self.loggit : logging.info( 'tag {}'.format(tag) ) # super DBG
-        # Only care about <img tags,
-        if tag == 'img' :
-            # look at the attributes for the src= attribute.
+        if tag == 'img' : # Only care about <img tags,
+            # scan the attributes for the src= attribute.
             for (attr,val) in attrs :
                 if attr == 'src' :
-                    if self.loggit : #DBG
-                        logging.info( '  parsing src: {}'.format(val) ) # DBG
+                    # comic site smackjeeves likes to alternate the same
+                    # image between "www.smackjeeves.com" and
+                    # "img3.smackjeeves.com" for no apparent reason.
+                    val = val.replace('img3.smack','www.smack')
+                    if self.loggit :
+                        logging.info( '  parsing src: {}'.format(val) )
                     # check for presence of blacklisted text element
-                    for nono in self.blacklist :
-                        if nono in val :
-                            if self.loggit : #DBG
-                                logging.info('  rejected for {}'.format(nono) ) #DBG
-                            return # bad image, do not include in hash
-                    # put the source URL in the hash and log it. But first:
-                    # the comic hosting site smackjeeves.com loads the
-                    # identical images, sometimes as http://www.smackjeeves
-                    # and sometimes as http://img3.smackjeeves. Why? Who
-                    # knows? But it causes false positives. So normalize
-                    # "/img3." to "/www."
-                    val = val.replace('/img3.','/www.')
-                    # Also smackjeeves sometimes gives the comic image as a
-                    # full URL starting with 'http://' and sometimes just
-                    # starts with the 'www.' Or 'img3.' Fuckers.
-                    if val.startswith('http') :
-                        val = val.replace('http://','')
-                        val = val.replace('https://','')
-                    val = val.encode( 'utf-8', 'ignore' )
-                    if self.loggit : logging.info('  hashing: {}'.format(val) )
-                    self.sha1.update( val )
+                    if BLACKLIST.is_a_bad_url( self.comic_name, val ):
+                        if self.loggit :
+                            logging.info('  url rejected by blacklist' )
+                    else:
+                        self.sha1.update( val.encode('UTF-8','ignore') )
 
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -731,7 +836,7 @@ class WorkerBee ( QThread ) :
         # MyParser class above for how we build a signature.
 
         # Create an HTML parser and feed it the page, line by line
-        parsnip = MyParser( self.hash.copy(), comic.loggit )
+        parsnip = MyParser( self.hash.copy(), comic.name, comic.loggit )
         page_as_file = io.StringIO( page_text )
         line = page_as_file.readline()
         while 0 < len(line):
@@ -1108,6 +1213,7 @@ class ConcreteListModel ( QAbstractListModel ) :
         global COMICS, Comic, OLDCOMIC
         self.beginResetModel()
         settings.beginGroup(u'comiclist')
+        # The count of saved comics in the Array - could be 0.
         count = settings.beginReadArray(u'comics')
         for i in range(count) :
             name = '?'
@@ -1576,9 +1682,9 @@ class CobroWebPage(QWebEngineView) :
 #
 class TheAppWindow(QMainWindow) :
     def __init__(self, settings, parent=None) :
-        global WELCOME_MSG
+        global WELCOME_MSG, BLACKLIST
 
-        super(QMainWindow,self).__init__(parent) #P2
+        super().__init__(parent)
         # Save the settings instance for use at shutdown (see below)
         self.settings = settings
         self.settings_have_been_saved = False
@@ -1588,6 +1694,8 @@ class TheAppWindow(QMainWindow) :
         self.model = ConcreteListModel(self)
         # Tell the list to load itself from the settings, this populates the list
         self.model.load(settings)
+        # Create the Blacklist and let it load itself from settings.
+        BLACKLIST = BlackList(settings)
         # Create the central widget. Create everything else and
         # tuck them into a layout which the gets applied to central.
         central = QWidget()
@@ -1654,6 +1762,11 @@ class TheAppWindow(QMainWindow) :
         file_import_action.setToolTip(u"Import comics from a file")
         file_import_action.triggered.connect( self.file_import )
         file_menu.addAction(file_import_action)
+        # Create the edit blacklist action
+        file_black_action = QAction('Edit Blacklist',self)
+        file_black_action.setToolTip('Edit url filter actions')
+        file_black_action.triggered.connect( self.file_blacklist )
+        file_menu.addAction(file_black_action)
         # Activate the menu and menu bar
         self.setMenuBar(menubar)
         # Create our worker thread and start it. Connect its signal to slots in both
@@ -1913,6 +2026,10 @@ class TheAppWindow(QMainWindow) :
         finally:
             fobj.close()
 
+    # implement File>Edit Blacklist
+    def file_blacklist(self):
+        BLACKLIST.edit_list(self)
+
     # reimplement QWidget::closeEvent() to save the current comics.
 
     def closeEvent(self, event):
@@ -1928,6 +2045,8 @@ class TheAppWindow(QMainWindow) :
                 self.settings.setValue("cobro/position", self.pos())
                 # Save all comics
                 self.model.save(self.settings)
+                # Save the blacklist
+                BLACKLIST.save(self.settings)
                 self.settings_have_been_saved = True # don't come back
             except Exception as wtf :
                 logging.error('Error saving settings:\n' + str(wtf) )
@@ -1985,7 +2104,7 @@ if __name__ == "__main__":
     parser.add_argument('--level',dest='level',
                         choices=['DEBUG', 'INFO','ERROR'],default='ERROR',
                         help='''ERROR: display only problems;
-INFO to see comics named to --logitem; DEBUG for useless info''')
+INFO to see comics named to --logitem; DEBUG for tons of trivia''')
     # --logfile=filepath
     parser.add_argument('--logfile',dest='logfile',
                         help='specify a text file to receive log data in place of stderr',
