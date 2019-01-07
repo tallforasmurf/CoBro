@@ -1224,10 +1224,12 @@ class ConcreteListModel ( QAbstractListModel ) :
                 name = settings.value(u'name')
                 url = settings.value(u'url')
                 try:
-                    DBG = settings.value(u'old_hash')
-                    old_hash = bytes( settings.value(u'old_hash') )
-                except:
+                    DBG = settings.value(u'old_hash',type=QByteArray)
+                    old_hash = bytes( DBG )
+                except Exception as Ex:
                     logging.error('error reading hash for comic {0}:{1}, comic will appear new'.format(i,name))
+                    logging.error('Exception: %s',Ex)
+                    logging.error('value type %s',type(DBG))
                 comic = Comic(name,url,old_hash,OLDCOMIC)
                 # Look to see if this comic wants logging. Implement an undocumented
                 # hack, "*" matches any.
