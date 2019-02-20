@@ -1,13 +1,20 @@
-COBRO: A Comics Browser
+COBRO: Abandoned Project
 =======================
 
-CoBro is a simple web browser designed to store and display a list of web comics. Its aim is to make it quick and simple to enjoy one's daily comics without needing to open the comics in a browser. It shows the user which comics have been updated since they were last viewed.
+CoBro was a simple web browser designed to store and display a list of web comics. Its aim was to make it quick and simple to enjoy one's daily comics without needing to open the comics in a browser. It shows the user which comics have been updated since they were last viewed.
 
-CoBro source can be viewed here: https://github.com/tallforasmurf/CoBro
+Project Abandonment
+-------------------
 
-That location also has a couple of lists of comics that you can import into CoBro to get started.
+After working on Cobro, and using it myself, for several years, I have decided to give up on it. The combination of PyQt5 and QtWebEngine are just unmanageable and untrustworthy. I have never succeeded in getting Cobro packaged using any of the Python packagers, CxFreeze, Py2app, or PyInstaller -- even after devoting many volunteer hours to assisting the development of PyInstaller.
 
-At the moment CoBro is Python source only. Hopefully soon it will be available for at least MacOS as a binary app.
+There are other intractable issues, for example the frequent failures of fake-useragent to initialize; the frequent problems with mismatched levels of ssl security causing comics to not load; the many crazy ways comic sites have of coding that causes uncatchable false-positive; unannounced changes in the way PyQt5 is distributed; and on and on.
+
+Most recently when I attempted to upgrade to the latest level of PyQt5 and QtWebEngine, the new browser module just doesn't display correctly. Something has changed, perhaps there is a setting I could tweak, but you know what? Fuck it.
+
+I have switched my personal web-comic reading to the use of an RSS reader (Reeder). That meant dropping a couple of comics of which I was fond because they don't provide RSS or Atom feeds. Tough. I'm moving on.
+
+The remainder of this README is kept to provide orientation in case anyone else is fool enough to try to pick this project up. My best wishes go with you.
 
 The Inspiration: Comictastic
 ----------------------------
